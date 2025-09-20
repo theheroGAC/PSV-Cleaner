@@ -58,6 +58,6 @@ vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} eboot.bin
     FILE sce_sys/livearea/contents/startup.png sce_sys/livearea/contents/startup.png
     FILE sce_sys/livearea/contents/template.xml sce_sys/livearea/contents/template.xml
 
-    # Risorse interne
-    FILE resources/Reihen.png resources/Reihen.png
+           # Risorse interne
+           FILE resources/Reihen.png resources/Reihen.png
 )

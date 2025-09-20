@@ -1,6 +1,7 @@
 #include <psp2/io/dirent.h>
 #include <psp2/io/fcntl.h>
 #include <psp2/io/stat.h>
+#include <psp2/kernel/threadmgr.h>
 #include <stdio.h>
 #include <string.h>
 #include "psv_cleaner_core.h"
@@ -40,8 +41,17 @@ const char *TEMP_PATHS[] = {
     "ux0:data/moonlight/logs/",
     "ux0:data/autoplugin/cache/",
     "ux0:data/autoplugin/logs/",
+    "ux0:data/autoplugin2/cache/",
+    "ux0:data/autoplugin2/logs/",
     "ux0:data/henkaku/cache/",
     "ux0:data/henkaku/logs/",
+    
+    // Adrenaline cleanup
+    "ux0:data/Adrenaline/cache/",
+    "ux0:data/Adrenaline/logs/",
+    "ux0:data/Adrenaline/temp/",
+    "ux0:data/Adrenaline/crash/",
+    "ux0:data/Adrenaline/dumps/",
     
     // Browser and web cache
     "ux0:data/browser/cache/",
@@ -95,15 +105,72 @@ const size_t TEMP_PATHS_COUNT = sizeof(TEMP_PATHS)/sizeof(TEMP_PATHS[0]);
 
 // Force delete dump files that might be locked by system
 void forceDeleteDumpFiles() {
-    // Try to delete common dump file patterns
+    // Try to delete common dump file patterns with multiple attempts
     const char* dumpPatterns[] = {
         "ux0:data/psp2core",
-        "ux0:data/psp2dmp"
+        "ux0:data/psp2dmp",
+        "ux0:data/psp2core.*",
+        "ux0:data/psp2dmp.*",
+        "ux0:data/*.psp2core",
+        "ux0:data/*.psp2dmp"
     };
     
-    for (int i = 0; i < 2; i++) {
-        // Try to remove dump files (PS Vita will handle permissions automatically)
-        sceIoRemove(dumpPatterns[i]);
+    for (int i = 0; i < 6; i++) {
+        // Try multiple removal attempts for locked files
+        for (int attempt = 0; attempt < 3; attempt++) {
+            sceIoRemove(dumpPatterns[i]);
+            sceKernelDelayThread(100 * 1000); // 100ms delay between attempts
+        }
+    }
+    
+    // Also try to delete any dump files in subdirectories
+    const char* dumpDirs[] = {
+        "ux0:data/crash_dumps/",
+        "ux0:data/dumps/",
+        "ux0:data/Adrenaline/dumps/",
+        "ux0:data/Adrenaline/crash/"
+    };
+    
+    for (int i = 0; i < 4; i++) {
+        deleteRecursive(dumpDirs[i]);
+    }
+}
+
+// Aggressive dump file deletion - tries to find and delete .psp2dmp files
+void aggressiveDumpCleanup() {
+    // Try to find and delete .psp2dmp files in common locations
+    const char* searchPaths[] = {
+        "ux0:data/",
+        "ux0:temp/",
+        "ux0:cache/",
+        "ux0:log/"
+    };
+    
+    for (int path = 0; path < 4; path++) {
+        SceUID dfd = sceIoDopen(searchPaths[path]);
+        if (dfd >= 0) {
+            SceIoDirent dir;
+            memset(&dir, 0, sizeof(SceIoDirent));
+            
+            while (sceIoDread(dfd, &dir) > 0) {
+                // Check if file ends with .psp2dmp
+                char* filename = dir.d_name;
+                int len = strlen(filename);
+                if (len > 8 && strcmp(filename + len - 8, ".psp2dmp") == 0) {
+                    char fullPath[512];
+                    snprintf(fullPath, sizeof(fullPath), "%s%s", searchPaths[path], filename);
+                    
+                    // Try multiple times to delete the file
+                    for (int attempt = 0; attempt < 5; attempt++) {
+                        if (sceIoRemove(fullPath) >= 0) {
+                            break; // Successfully deleted
+                        }
+                        sceKernelDelayThread(200 * 1000); // 200ms delay
+                    }
+                }
+            }
+            sceIoDclose(dfd);
+        }
     }
 }
 
@@ -168,6 +235,9 @@ unsigned long long cleanTemporaryFiles() {
     // First try to force delete locked dump files
     forceDeleteDumpFiles();
     
+    // Try aggressive dump cleanup
+    aggressiveDumpCleanup();
+    
     for(size_t i=0;i<TEMP_PATHS_COUNT;i++){
         // Continue with cleaning (PS Vita handles suspension automatically)
         deleteRecursive(TEMP_PATHS[i]);
@@ -175,6 +245,7 @@ unsigned long long cleanTemporaryFiles() {
     
     // Try again to delete dump files after main cleaning
     forceDeleteDumpFiles();
+    aggressiveDumpCleanup();
     
     unsigned long long after = calculateTempSize();
     return before - after;

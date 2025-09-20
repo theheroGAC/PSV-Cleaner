@@ -12,5 +12,6 @@ unsigned long long calculateTempSize();
 unsigned long long cleanTemporaryFiles();
 void deleteRecursive(const char *path);
 void forceDeleteDumpFiles();
+void aggressiveDumpCleanup();
 
 #endif // PSV_CLEANER_CORE_H
