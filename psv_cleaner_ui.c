@@ -113,6 +113,13 @@ typedef struct {
     int enabled[10];
 } MenuOptions;
 
+// Preview screen state
+typedef struct {
+    FileList *fileList;
+    int scrollOffset;
+    int selectedFile;
+} PreviewState;
+
 // Initialize menu options
 void initMenuOptions(MenuOptions *menu) {
     menu->selected = 0;
@@ -164,6 +171,100 @@ void drawOptionsMenu(vita2d_pgf *font, MenuOptions *menu) {
     vita2d_pgf_draw_text(font, 180, 540, RGBA(200, 200, 200, 255), 0.8f, "D-Pad: navigate | X: toggle | O: start | △: exit");
 }
 
+// Draw preview screen
+void drawPreviewScreen(vita2d_pgf *font, PreviewState *preview) {
+    // Draw background
+    vita2d_draw_rectangle(0, 0, 960, 544, RGBA(15, 25, 40, 255));
+    
+    // Draw title
+    vita2d_pgf_draw_text(font, 480 - 120, 40, RGBA(255, 255, 255, 255), 1.8f, "Preview - Files to Delete");
+    
+    if (!preview->fileList || preview->fileList->count == 0) {
+        // No files found
+        vita2d_pgf_draw_text(font, 480 - 100, 272, RGBA(255, 255, 100, 255), 1.2f, "No temporary files found!");
+    } else {
+        // Draw file count and total size
+        char infoText[256];
+        if (preview->fileList->totalSize < (1024 * 1024))
+            snprintf(infoText, sizeof(infoText), "Files: %d | Total: %llu KB", 
+                    preview->fileList->count, preview->fileList->totalSize / 1024);
+        else if (preview->fileList->totalSize < (1024ULL * 1024 * 1024))
+            snprintf(infoText, sizeof(infoText), "Files: %d | Total: %.2f MB", 
+                    preview->fileList->count, preview->fileList->totalSize / (1024.0 * 1024));
+        else
+            snprintf(infoText, sizeof(infoText), "Files: %d | Total: %.2f GB", 
+                    preview->fileList->count, preview->fileList->totalSize / (1024.0 * 1024 * 1024));
+        
+        vita2d_pgf_draw_text(font, 30, 80, RGBA(100, 255, 100, 255), 1.0f, infoText);
+        
+        // Draw file list (scrollable)
+        int maxVisible = 18; // Maximum files visible on screen
+        int startIdx = preview->scrollOffset;
+        int endIdx = startIdx + maxVisible;
+        if (endIdx > preview->fileList->count) endIdx = preview->fileList->count;
+        
+        for (int i = startIdx; i < endIdx; i++) {
+            int y = 110 + ((i - startIdx) * 22);
+            int color = (i == preview->selectedFile) ? RGBA(255, 255, 100, 255) : RGBA(200, 200, 200, 255);
+            
+            // Draw selection background
+            if (i == preview->selectedFile) {
+                vita2d_draw_rectangle(20, y - 3, 920, 20, RGBA(50, 100, 150, 100));
+            }
+            
+            // Format file path (truncate if too long)
+            char displayPath[80];
+            if (strlen(preview->fileList->files[i].path) > 75) {
+                strncpy(displayPath, preview->fileList->files[i].path, 72);
+                displayPath[72] = '.';
+                displayPath[73] = '.';
+                displayPath[74] = '.';
+                displayPath[75] = '\0';
+            } else {
+                strcpy(displayPath, preview->fileList->files[i].path);
+            }
+            
+            // Format file size
+            char sizeText[32];
+            unsigned long long size = preview->fileList->files[i].size;
+            if (size < 1024)
+                snprintf(sizeText, sizeof(sizeText), "%llu B", size);
+            else if (size < (1024 * 1024))
+                snprintf(sizeText, sizeof(sizeText), "%llu KB", size / 1024);
+            else if (size < (1024ULL * 1024 * 1024))
+                snprintf(sizeText, sizeof(sizeText), "%.2f MB", size / (1024.0 * 1024));
+            else
+                snprintf(sizeText, sizeof(sizeText), "%.2f GB", size / (1024.0 * 1024 * 1024));
+            
+            // Draw file info
+            vita2d_pgf_draw_text(font, 25, y + 12, color, 0.7f, displayPath);
+            vita2d_pgf_draw_text(font, 850, y + 12, color, 0.7f, sizeText);
+        }
+        
+        // Draw scrollbar if needed
+        if (preview->fileList->count > maxVisible) {
+            int scrollbarHeight = 400;
+            int scrollbarY = 110;
+            int thumbHeight = (maxVisible * scrollbarHeight) / preview->fileList->count;
+            int thumbY = scrollbarY + (preview->scrollOffset * scrollbarHeight) / preview->fileList->count;
+            
+            // Draw scrollbar background
+            vita2d_draw_rectangle(945, scrollbarY, 10, scrollbarHeight, RGBA(40, 40, 40, 255));
+            // Draw scrollbar thumb
+            vita2d_draw_rectangle(945, thumbY, 10, thumbHeight, RGBA(100, 150, 200, 255));
+        }
+    }
+    
+    // Draw instructions
+    vita2d_draw_rectangle(0, 510, 960, 34, RGBA(20, 30, 50, 220));
+    vita2d_pgf_draw_text(font, 30, 530, RGBA(200, 200, 200, 255), 0.8f, 
+                        "D-Pad: scroll | X: Start cleaning | O: Cancel");
+    
+    // Draw borders
+    vita2d_draw_rectangle(0, 0, 960, 2, RGBA(0, 150, 255, 255));
+    vita2d_draw_rectangle(0, 542, 960, 2, RGBA(0, 150, 255, 255));
+}
+
 int main() {
     // Initialize required modules
     sceSysmoduleLoadModule(SCE_SYSMODULE_PGF);
@@ -204,7 +305,14 @@ int main() {
     MenuOptions menu;
     initMenuOptions(&menu);
     
+    // Initialize preview state
+    PreviewState preview;
+    preview.fileList = NULL;
+    preview.scrollOffset = 0;
+    preview.selectedFile = 0;
+    
     int showMenu = 0;
+    int showPreview = 0;
     int running = 1;
     while (running) {
         sceCtrlPeekBufferPositive(0, &pad, 1);
@@ -225,7 +333,10 @@ int main() {
         // Draw subtitle
         vita2d_pgf_draw_text(font, 480 - 140, 120, RGBA(200, 200, 200, 255), 1.1f, "Temporary Files Cleaner for PS Vita");
 
-        if (showMenu) {
+        if (showPreview) {
+            // Draw preview screen
+            drawPreviewScreen(font, &preview);
+        } else if (showMenu) {
             // Draw options menu
             drawOptionsMenu(font, &menu);
         } else {
@@ -255,7 +366,119 @@ int main() {
         // GPU memory cleanup every frame to prevent crashes
         gpuMemoryCleanup();
 
-        if (showMenu) {
+        if (showPreview) {
+            // Handle preview navigation
+            if (pad.buttons & SCE_CTRL_UP) {
+                if (preview.selectedFile > 0) {
+                    preview.selectedFile--;
+                    if (preview.selectedFile < preview.scrollOffset) {
+                        preview.scrollOffset = preview.selectedFile;
+                    }
+                }
+                sceKernelDelayThread(100 * 1000);
+            }
+            if (pad.buttons & SCE_CTRL_DOWN) {
+                if (preview.fileList && preview.selectedFile < preview.fileList->count - 1) {
+                    preview.selectedFile++;
+                    if (preview.selectedFile >= preview.scrollOffset + 18) {
+                        preview.scrollOffset = preview.selectedFile - 17;
+                    }
+                }
+                sceKernelDelayThread(100 * 1000);
+            }
+            if (pad.buttons & SCE_CTRL_CROSS) {
+                // Start cleaning
+                showPreview = 0;
+                
+                // Start cleaning with progress bar
+                for (int pct = 0; pct <= 100; pct++) {
+                    vita2d_start_drawing();
+                    vita2d_clear_screen();
+                    drawProgressBar(font, pct);
+                    vita2d_end_drawing();
+                    vita2d_swap_buffers();
+                    sceKernelDelayThread(50 * 1000);
+                    
+                    // Check if user presses Circle to exit during cleaning
+                    sceCtrlPeekBufferPositive(0, &pad, 1);
+                    if (pad.buttons & SCE_CTRL_CIRCLE) {
+                        running = 0;
+                        break;
+                    }
+                }
+
+                if (running) {
+                    unsigned long long spaceFreed = cleanTemporaryFiles();
+                    int filesDeleted = getDeletedFilesCount();
+                    
+                    // Recalculate space after cleaning
+                    spaceBefore = calculateTempSize();
+                    if (spaceBefore < (1024 * 1024))
+                        snprintf(freeText, sizeof(freeText), "Space to free: %llu KB", spaceBefore / 1024);
+                    else if (spaceBefore < (1024ULL * 1024 * 1024))
+                        snprintf(freeText, sizeof(freeText), "Space to free: %.2f MB", spaceBefore / (1024.0 * 1024));
+                    else
+                        snprintf(freeText, sizeof(freeText), "Space to free: %.2f GB", spaceBefore / (1024.0 * 1024 * 1024));
+                    
+                    // Format space freed text
+                    char spaceText[128];
+                    if (spaceFreed < (1024 * 1024))
+                        snprintf(spaceText, sizeof(spaceText), "Space Freed: %llu KB", spaceFreed / 1024);
+                    else if (spaceFreed < (1024ULL * 1024 * 1024))
+                        snprintf(spaceText, sizeof(spaceText), "Space Freed: %.2f MB", spaceFreed / (1024.0 * 1024));
+                    else
+                        snprintf(spaceText, sizeof(spaceText), "Space Freed: %.2f GB", spaceFreed / (1024.0 * 1024 * 1024));
+
+                    // Play success sound
+                    playSuccessSound();
+                    
+                    // Show notification
+                    showNotification("PSV Cleaner", "Cleaning completed successfully!");
+
+                    // Draw success screen with statistics
+                    vita2d_start_drawing();
+                    vita2d_clear_screen();
+                    vita2d_draw_rectangle(0, 0, 960, 544, RGBA(15, 25, 40, 255));
+                    
+                    // Draw success icon/checkmark effect
+                    vita2d_draw_rectangle(430, 140, 100, 100, RGBA(0, 200, 0, 100));
+                    
+                    // Draw title
+                    vita2d_pgf_draw_text(font, 480 - 150, 180, RGBA(0, 255, 0, 255), 1.8f, "Cleaning Completed!");
+                    
+                    // Draw statistics
+                    vita2d_pgf_draw_text(font, 480 - 100, 260, RGBA(255, 255, 255, 255), 1.2f, spaceText);
+                    
+                    char filesText[64];
+                    snprintf(filesText, sizeof(filesText), "Files Deleted: %d", filesDeleted);
+                    vita2d_pgf_draw_text(font, 480 - 100, 300, RGBA(255, 255, 255, 255), 1.2f, filesText);
+                    
+                    // Draw decorative line
+                    vita2d_draw_rectangle(330, 240, 300, 2, RGBA(0, 200, 0, 255));
+                    
+                    vita2d_end_drawing();
+                    vita2d_swap_buffers();
+                    sceKernelDelayThread(3 * 1000 * 1000); // 3 seconds
+                }
+                
+                // Free preview list
+                if (preview.fileList) {
+                    freeFileList(preview.fileList);
+                    preview.fileList = NULL;
+                }
+                
+                sceKernelDelayThread(200 * 1000);
+            }
+            if (pad.buttons & SCE_CTRL_CIRCLE) {
+                // Cancel preview
+                showPreview = 0;
+                if (preview.fileList) {
+                    freeFileList(preview.fileList);
+                    preview.fileList = NULL;
+                }
+                sceKernelDelayThread(200 * 1000);
+            }
+        } else if (showMenu) {
             // Handle menu navigation
             if (pad.buttons & SCE_CTRL_UP) {
                 menu.selected = (menu.selected - 1 + menu.total_options) % menu.total_options;
@@ -288,46 +511,26 @@ int main() {
                 sceKernelDelayThread(200 * 1000); // 200ms delay
             }
             if (pad.buttons & SCE_CTRL_CROSS) {
-                // Start cleaning with progress bar
-                for (int pct = 0; pct <= 100; pct++) {
-                    vita2d_start_drawing();
-                    vita2d_clear_screen();
-                    drawProgressBar(font, pct);
-                    vita2d_end_drawing();
-                    vita2d_swap_buffers();
-                    sceKernelDelayThread(50 * 1000); // 50 ms for smoother progress and less GPU load
-                    
-                    // Check if user presses Circle to exit during cleaning
-                    sceCtrlPeekBufferPositive(0, &pad, 1);
-                    if (pad.buttons & SCE_CTRL_CIRCLE) {
-                        running = 0;
-                        break;
-                    }
+                // Show preview screen
+                showPreview = 1;
+                preview.scrollOffset = 0;
+                preview.selectedFile = 0;
+                
+                // Show loading message
+                vita2d_start_drawing();
+                vita2d_clear_screen();
+                vita2d_draw_rectangle(0, 0, 960, 544, RGBA(15, 25, 40, 255));
+                vita2d_pgf_draw_text(font, 480 - 100, 272, RGBA(255, 255, 100, 255), 1.3f, "Scanning files...");
+                vita2d_end_drawing();
+                vita2d_swap_buffers();
+                
+                // Create and populate file list
+                preview.fileList = createFileList();
+                if (preview.fileList) {
+                    scanFilesForPreview(preview.fileList);
                 }
-
-                if (running) {
-                    unsigned long long spaceFreed = cleanTemporaryFiles();
-                    char result[128];
-                    if (spaceFreed < (1024 * 1024))
-                        snprintf(result, sizeof(result), "Cleaning completed! Freed: %llu KB", spaceFreed / 1024);
-                    else if (spaceFreed < (1024ULL * 1024 * 1024))
-                        snprintf(result, sizeof(result), "Cleaning completed! Freed: %.2f MB", spaceFreed / (1024.0 * 1024));
-                    else
-                        snprintf(result, sizeof(result), "Cleaning completed! Freed: %.2f GB", spaceFreed / (1024.0 * 1024 * 1024));
-
-                    // Play success sound
-                    playSuccessSound();
-                    
-                    // Show notification
-                    showNotification("PSV Cleaner", "Cleaning completed successfully!");
-
-                    vita2d_start_drawing();
-                    vita2d_clear_screen();
-                    vita2d_pgf_draw_text(font, 300, 272, RGBA(0, 255, 0, 255), 1.3f, result);
-                    vita2d_end_drawing();
-                    vita2d_swap_buffers();
-                    sceKernelDelayThread(2 * 1000 * 1000); // 2 seconds
-                }
+                
+                sceKernelDelayThread(200 * 1000);
             }
 
             if (pad.buttons & SCE_CTRL_CIRCLE) {
@@ -338,6 +541,11 @@ int main() {
         sceKernelDelayThread(16 * 1000); // ~60 FPS limit for better GPU performance
     }
 
+    // Cleanup
+    if (preview.fileList) {
+        freeFileList(preview.fileList);
+    }
+    
     vita2d_free_texture(splash);
     vita2d_free_pgf(font);
     vita2d_fini();

@@ -4,7 +4,11 @@
 #include <psp2/kernel/threadmgr.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include "psv_cleaner_core.h"
+
+// Global counter for deleted files
+int g_deletedFilesCount = 0;
 
 // List of temporary folders to clean
 const char *TEMP_PATHS[] = {
@@ -14,6 +18,7 @@ const char *TEMP_PATHS[] = {
     "ux0:cache/",
     "ux0:log/",
     "ur0:temp/",
+    "ur0:temp/sqlite/",
     "uma0:temp/",
     
     // VitaShell cleanup
@@ -21,50 +26,118 @@ const char *TEMP_PATHS[] = {
     "ux0:VitaShell/temp/",
     "ux0:VitaShell/log/",
     "ux0:VitaShell/recent/",
+    "ux0:VitaShell/backup/temp/",
+    "ux0:VitaShell/trash/",
     
     // PKGi cleanup
     "ux0:pkgi/tmp/",
     "ux0:pkgi/cache/",
     "ux0:pkgi/log.txt",
+    "ux0:pkgi/downloads/temp/",
+    "ux0:pkgi/backup/temp/",
     
-    // RetroArch cleanup
+    // RetroArch cleanup (cache and logs only, never saves or configs)
     "ux0:data/retroarch/cache/",
     "ux0:data/retroarch/logs/",
     "ux0:data/retroarch/temp/",
+    "ux0:data/retroarch/thumbnails/cache/",
+    "ux0:data/retroarch/shaders/cache/",
+    "ux0:data/retroarch/database/rdb/temp/",
     
     // PSP Emulator cleanup
     "ux0:pspemu/temp/",
     "ux0:pspemu/cache/",
     
-    // Additional homebrew cleanup
-    "ux0:data/moonlight/cache/",
-    "ux0:data/moonlight/logs/",
-    "ux0:data/autoplugin/cache/",
-    "ux0:data/autoplugin/logs/",
-    "ux0:data/autoplugin2/cache/",
-    "ux0:data/autoplugin2/logs/",
-    "ux0:data/henkaku/cache/",
-    "ux0:data/henkaku/logs/",
-    
-    // Adrenaline cleanup
+    // Adrenaline PSP emulator cleanup
     "ux0:data/Adrenaline/cache/",
     "ux0:data/Adrenaline/logs/",
     "ux0:data/Adrenaline/temp/",
     "ux0:data/Adrenaline/crash/",
     "ux0:data/Adrenaline/dumps/",
     
-    // Browser and web cache
+    // Homebrew applications - Moonlight
+    "ux0:data/moonlight/cache/",
+    "ux0:data/moonlight/logs/",
+    
+    // Homebrew applications - Autoplugin
+    "ux0:data/autoplugin/cache/",
+    "ux0:data/autoplugin/logs/",
+    "ux0:data/autoplugin2/cache/",
+    "ux0:data/autoplugin2/logs/",
+    
+    // Homebrew applications - Henkaku
+    "ux0:data/henkaku/cache/",
+    "ux0:data/henkaku/logs/",
+    
+    // Homebrew applications - VitaGrafix
+    "ux0:data/VitaGrafix/cache/",
+    "ux0:data/VitaGrafix/logs/",
+    
+    // Homebrew applications - reF00D
+    "ux0:data/reF00D/cache/",
+    
+    // Homebrew applications - NoNpDrm
+    "ux0:data/NoNpDrm/temp/",
+    
+    // Homebrew applications - 0syscall6
+    "ux0:data/0syscall6/cache/",
+    
+    // Homebrew applications - TAI plugin system
+    "ux0:data/tai/cache/",
+    
+    // Homebrew applications - PSVshell
+    "ux0:data/PSVshell/logs/",
+    "ux0:data/PSVshell/cache/",
+    
+    // Homebrew applications - SaveManager
+    "ux0:data/savemgr/log/",
+    
+    // Homebrew applications - VitaCheat
+    "ux0:data/vitacheat/logs/",
+    
+    // Homebrew applications - rinCheat
+    "ux0:data/rinCheat/logs/",
+    
+    // Homebrew applications - TropHAX
+    "ux0:data/TropHAX/logs/",
+    
+    // Browser and webkit cache
     "ux0:data/browser/cache/",
     "ux0:data/browser/temp/",
     "ux0:data/browser/logs/",
+    "ux0:data/webkit/cache/",
+    "ux0:data/webkit/localstorage/temp/",
+    
+    // Network temporary files
+    "ux0:data/net/temp/",
     
     // Download cleanup (safe temp files only)
     "ux0:download/temp/",
     "ux0:downloads/temp/",
+    "ux0:bgdl/t/",
+    
+    // Package and installation temporary files
+    "ux0:data/pkg/temp/",
+    "ux0:package/temp/",
+    "ux0:appmeta/temp/",
+    "ur0:appmeta/temp/",
+    "ux0:license/temp/",
+    
+    // System update and patch cleanup (safe temp files)
+    "ux0:patch_temp/",
+    "ux0:update_temp/",
+    
+    // Media thumbnails (regenerable)
+    "ux0:picture/.thumbnails/",
+    "ux0:video/.thumbnails/",
+    "ux0:music/.cache/",
+    "ux0:photo/cache/",
+    
+    // Shader logs
+    "ux0:shaderlog/",
     
     // Additional log folders (safe)
     "ux0:data/logs/temp/",
-    "ux0:data/temp/",
     "ux0:data/cache/",
     
     // USB and external storage cleanup (safe)
@@ -73,35 +146,28 @@ const char *TEMP_PATHS[] = {
     "uma0:data/temp/",
     "uma0:data/cache/",
     
-    // Additional VitaShell paths (safe)
-    "ux0:VitaShell/backup/temp/",
-    "ux0:VitaShell/trash/",
-    
-    // PKGi additional paths (safe)
-    "ux0:pkgi/downloads/temp/",
-    "ux0:pkgi/backup/temp/",
-    
-    // RetroArch additional paths (safe - only cache)
-    "ux0:data/retroarch/thumbnails/cache/",
-    
-    // System update cleanup (safe temp files)
-    "ux0:patch_temp/",
-    "ux0:update_temp/",
-    
-    // Crash dump files (safe to delete)
+    // Crash dump files (safe to delete - never contains user data)
     "ux0:data/psp2core*",
     "ux0:data/*.psp2core",
     "ux0:data/psp2dmp*",
     "ux0:data/*.psp2dmp",
     "ux0:data/crash_dumps/",
     "ux0:data/dumps/",
-    
-    // Specific dump file patterns
     "ux0:data/psp2core",
     "ux0:data/psp2dmp"
 };
 
 const size_t TEMP_PATHS_COUNT = sizeof(TEMP_PATHS)/sizeof(TEMP_PATHS[0]);
+
+// Get deleted files count
+int getDeletedFilesCount() {
+    return g_deletedFilesCount;
+}
+
+// Reset deleted files count
+void resetDeletedFilesCount() {
+    g_deletedFilesCount = 0;
+}
 
 // Force delete dump files that might be locked by system
 void forceDeleteDumpFiles() {
@@ -195,15 +261,59 @@ void deleteRecursive(const char *path) {
                 }
             } else {
                 // Try to remove file
-                sceIoRemove(newPath);
+                if (sceIoRemove(newPath) >= 0) {
+                    g_deletedFilesCount++;
+                }
             }
         }
         sceIoDclose(dfd);
         sceIoRmdir(path);
     } else {
         // Try to remove file
-        sceIoRemove(path);
+        if (sceIoRemove(path) >= 0) {
+            g_deletedFilesCount++;
+        }
     }
+}
+
+// Calculate size recursively for a single path
+unsigned long long calculateTempSizeRecursive(const char *path) {
+    unsigned long long total = 0;
+    SceUID dfd;
+    SceIoDirent dir;
+    memset(&dir, 0, sizeof(SceIoDirent));
+    
+    dfd = sceIoDopen(path);
+    if (dfd >= 0) {
+        while (sceIoDread(dfd, &dir) > 0) {
+            if (strcmp(dir.d_name, ".") == 0 || strcmp(dir.d_name, "..") == 0)
+                continue;
+                
+            char newPath[1024];
+            snprintf(newPath, sizeof(newPath), "%s%s%s", path,
+                     (path[strlen(path)-1] == '/') ? "" : "/",
+                     dir.d_name);
+            
+            if (SCE_S_ISDIR(dir.d_stat.st_mode)) {
+                // Recursively calculate subdirectory size
+                total += calculateTempSizeRecursive(newPath);
+            } else {
+                // Add file size
+                total += dir.d_stat.st_size;
+            }
+        }
+        sceIoDclose(dfd);
+    } else {
+        // Try as a single file
+        SceIoStat stat;
+        if (sceIoGetstat(path, &stat) >= 0) {
+            if (!SCE_S_ISDIR(stat.st_mode)) {
+                total += stat.st_size;
+            }
+        }
+    }
+    
+    return total;
 }
 
 // Calculate total size of temporary folders
@@ -211,25 +321,16 @@ unsigned long long calculateTempSize() {
     unsigned long long total = 0;
     for(size_t i=0;i<TEMP_PATHS_COUNT;i++){
         // Continue with calculation (PS Vita handles suspension automatically)
-        
-        SceUID dfd;
-        SceIoDirent dir;
-        memset(&dir,0,sizeof(SceIoDirent));
-        dfd = sceIoDopen(TEMP_PATHS[i]);
-        if(dfd >= 0){
-            while(sceIoDread(dfd,&dir) > 0){
-                if(!SCE_S_ISDIR(dir.d_stat.st_mode)){
-                    total += dir.d_stat.st_size;
-                }
-            }
-            sceIoDclose(dfd);
-        }
+        total += calculateTempSizeRecursive(TEMP_PATHS[i]);
     }
     return total;
 }
 
 // Clean all temporary folders
 unsigned long long cleanTemporaryFiles() {
+    // Reset counter before cleaning
+    resetDeletedFilesCount();
+    
     unsigned long long before = calculateTempSize();
     
     // First try to force delete locked dump files
@@ -249,4 +350,139 @@ unsigned long long cleanTemporaryFiles() {
     
     unsigned long long after = calculateTempSize();
     return before - after;
+}
+
+// Create a new file list for preview
+FileList* createFileList() {
+    FileList *list = (FileList*)malloc(sizeof(FileList));
+    if (!list) return NULL;
+    
+    list->capacity = 100;
+    list->count = 0;
+    list->totalSize = 0;
+    list->files = (FileInfo*)malloc(sizeof(FileInfo) * list->capacity);
+    
+    if (!list->files) {
+        free(list);
+        return NULL;
+    }
+    
+    return list;
+}
+
+// Free file list
+void freeFileList(FileList *list) {
+    if (list) {
+        if (list->files) {
+            free(list->files);
+        }
+        free(list);
+    }
+}
+
+// Add file to list
+void addFileToList(FileList *list, const char *path, unsigned long long size) {
+    if (!list || !path) return;
+    
+    // Expand array if needed
+    if (list->count >= list->capacity) {
+        list->capacity *= 2;
+        FileInfo *newFiles = (FileInfo*)realloc(list->files, sizeof(FileInfo) * list->capacity);
+        if (!newFiles) return; // Out of memory
+        list->files = newFiles;
+    }
+    
+    // Add file info
+    strncpy(list->files[list->count].path, path, sizeof(list->files[list->count].path) - 1);
+    list->files[list->count].path[sizeof(list->files[list->count].path) - 1] = '\0';
+    list->files[list->count].size = size;
+    list->totalSize += size;
+    list->count++;
+}
+
+// Recursive scan for preview
+void scanPathForPreview(FileList *list, const char *path) {
+    SceUID dfd;
+    SceIoDirent dir;
+    memset(&dir, 0, sizeof(SceIoDirent));
+    
+    dfd = sceIoDopen(path);
+    if (dfd >= 0) {
+        while (sceIoDread(dfd, &dir) > 0) {
+            if (strcmp(dir.d_name, ".") == 0 || strcmp(dir.d_name, "..") == 0)
+                continue;
+                
+            char newPath[1024];
+            snprintf(newPath, sizeof(newPath), "%s%s%s", path,
+                     (path[strlen(path)-1] == '/') ? "" : "/",
+                     dir.d_name);
+            
+            if (SCE_S_ISDIR(dir.d_stat.st_mode)) {
+                // Recursively scan subdirectory
+                scanPathForPreview(list, newPath);
+            } else {
+                // Add file to list
+                addFileToList(list, newPath, dir.d_stat.st_size);
+            }
+        }
+        sceIoDclose(dfd);
+    } else {
+        // Try as a single file
+        SceIoStat stat;
+        if (sceIoGetstat(path, &stat) >= 0) {
+            if (!SCE_S_ISDIR(stat.st_mode)) {
+                addFileToList(list, path, stat.st_size);
+            }
+        }
+    }
+}
+
+// Scan all temporary files for preview
+void scanFilesForPreview(FileList *list) {
+    if (!list) return;
+    
+    for(size_t i=0; i<TEMP_PATHS_COUNT; i++){
+        scanPathForPreview(list, TEMP_PATHS[i]);
+    }
+    
+    // Special handling for dump files with patterns (*.psp2dmp, *.psp2core)
+    // Scan ux0:data/ for dump files specifically
+    const char* dumpSearchPaths[] = {
+        "ux0:data/",
+        "ux0:temp/",
+        "ux0:cache/",
+        "ux0:log/"
+    };
+    
+    for (int path = 0; path < 4; path++) {
+        SceUID dfd = sceIoDopen(dumpSearchPaths[path]);
+        if (dfd >= 0) {
+            SceIoDirent dir;
+            memset(&dir, 0, sizeof(SceIoDirent));
+            
+            while (sceIoDread(dfd, &dir) > 0) {
+                if (SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+                
+                char* filename = dir.d_name;
+                int len = strlen(filename);
+                
+                // Check for .psp2dmp or .psp2core files
+                int isDumpFile = 0;
+                if (len > 8 && strcmp(filename + len - 8, ".psp2dmp") == 0) {
+                    isDumpFile = 1;
+                } else if (len > 9 && strcmp(filename + len - 9, ".psp2core") == 0) {
+                    isDumpFile = 1;
+                } else if (strcmp(filename, "psp2core") == 0 || strcmp(filename, "psp2dmp") == 0) {
+                    isDumpFile = 1;
+                }
+                
+                if (isDumpFile) {
+                    char fullPath[512];
+                    snprintf(fullPath, sizeof(fullPath), "%s%s", dumpSearchPaths[path], filename);
+                    addFileToList(list, fullPath, dir.d_stat.st_size);
+                }
+            }
+            sceIoDclose(dfd);
+        }
+    }
 }
