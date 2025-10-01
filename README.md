@@ -11,47 +11,78 @@
 
 ## Key Features
 
-- **Comprehensive Cleaning** – Removes 45+ types of temporary files including system cache, homebrew logs, and application data.  
+- **Comprehensive Cleaning** – Removes 90+ types of temporary files including system cache, homebrew logs, and application data.  
 - **Safe & Secure** – Only deletes temporary files, never touches your games, saves, or important data.  
+- **File Preview** – See exactly which files will be deleted before cleaning with detailed list view.  
 - **Selective Cleaning** – Choose what to clean with an intuitive options menu.  
-- **Real-time Statistics** – See exactly how much space you can free before cleaning.  
-- **Modern Interface** – Clean, professional UI with smooth animations.  
+- **Real-time Statistics** – See exactly how much space you can free before cleaning with recursive calculation.  
+- **Modern Interface** – Clean, professional UI with smooth animations and scrollable file list.  
 - **GPU Optimized** – Designed to prevent crashes and ensure stable performance.
 
 ---
 
 ## What It Cleans
 
+### System Files
 - System temporary files and cache  
-- VitaShell file manager cache and logs  
-- PKGi package installer temporary files  
-- RetroArch emulator cache and logs  
+- System logs and SQLite temporary databases  
+- System update and patch temporary files  
+- Shader compilation logs  
+
+### File Managers & Package Installers
+- VitaShell file manager cache, logs, and trash  
+- PKGi package installer temporary files and cache  
+- Package installation temporary files  
+- App metadata temporary files  
+
+### Emulators
+- RetroArch emulator cache, logs, and shader cache  
+- Adrenaline PSP emulator cache and crash dumps  
+- PSP emulator temporary files  
+
+### Homebrew Applications
+- VitaGrafix, reF00D, NoNpDrm cache  
+- Autoplugin 1 & 2 cache and logs  
+- PSVshell, SaveManager logs  
+- VitaCheat, rinCheat, TropHAX logs  
+- Henkaku, TAI, 0syscall6 cache  
+- Moonlight streaming cache  
+
+### Media & Web
+- Browser and WebKit cache  
+- Picture, video, music thumbnails (regenerable)  
+- Network temporary files  
+
+### Other
 - Crash dump files (`psp2core`, `psp2dmp`)  
-- Browser cache and temporary files  
-- Homebrew application logs and cache  
-- USB storage temporary files  
-- Download incomplete files  
-- System update temporary files  
+- USB/SD card storage temporary files  
+- Background download temporary files  
+- License temporary files  
 
 ---
 
 ## Easy to Use
 
 1. Launch the application.  
-2. View how much space can be freed.  
-3. Press **Triangle** to open the options menu.  
-4. Select what you want to clean.  
-5. Press **X** to start cleaning.  
+2. View how much space can be freed (calculated recursively).  
+3. Press **X** to preview all files that will be deleted.  
+4. Review the detailed file list with sizes.  
+5. Press **X** again to confirm and start cleaning.  
 6. Watch the progress bar complete.  
+7. See results and updated space available.
+
+**Optional:** Press **Triangle** on main screen to access selective cleaning options.  
 
 ---
 
 ## Safety First
 
 ✅ **100% Safe** – Only removes temporary files  
-✅ **No data loss** – Games and saves are never touched  
+✅ **No data loss** – Games, saves, and configs are never touched  
+✅ **Preview before delete** – See exactly what will be removed  
 ✅ **Automatic permissions** – Handles locked files safely  
 ✅ **Crash protection** – GPU-optimized to prevent system crashes  
+✅ **Smart calculation** – Recursive scanning finds all temporary files  
 
 ---
 
@@ -61,7 +92,9 @@
 - **Requirements:** Henkaku/Enso homebrew support  
 - **Size:** Small footprint, efficient memory usage  
 - **Performance:** 60 FPS, GPU-optimized rendering  
-- **Compatibility:** Works with VitaShell, PKGi, RetroArch, and more  
+- **File Scanning:** Recursive directory scanning with dynamic memory allocation  
+- **Preview System:** Scrollable list supporting thousands of files  
+- **Compatibility:** Works with 20+ homebrew applications including VitaShell, PKGi, RetroArch, Adrenaline, and more  
 
 ---
 
