@@ -2,6 +2,54 @@
 
 All notable changes to PSV Cleaner will be documented in this file.
 
+## [1.03] - 2025-10-04
+
+### Added
+- **Cleaning Profiles System** - Three intelligent cleaning modes
+  - **Quick Profile** - Only safe cache files (VitaShell, PKGi, RetroArch, Browser, etc.)
+  - **Complete Profile** - All temporary files and system cleanup (default mode)
+  - **Selective Profile** - User manually chooses which categories to clean
+
+- **Profile Selection Screen** - Elegant initial screen at app startup
+  - Navigate profiles with D-Pad Up/Down
+  - Detailed descriptions for each profile mode
+  - One-time selection that configures the entire session
+
+- **Cleanup Counter System** - Persistent statistics tracking
+  - Saves total number of cleaning sessions
+  - Displays "Cleanup #X" on completion screen
+  - Persistent storage in ux0:data/PSV_Cleaner/counter.txt
+
+- **Additional Cleaning Paths** - Extended coverage
+  - ux0:download/ and ux0:downloads/ complete directory scanning
+  - Enhanced download temporary file detection
+
+### Improved
+- **User Interface Centering** - Professional text positioning
+  - All main titles perfectly centered on screen
+  - Consistent button alignment and spacing
+  - Improved visual hierarchy
+
+- **Profile-Based Menu Initialization** - Dynamic menu configuration
+  - Menu options automatically set based on selected profile
+  - Quick mode: only cache categories enabled by default
+  - Complete mode: all cleaning options enabled
+  - Selective mode: nothing pre-selected for manual choice
+
+- **Navigation Experience** - Enhanced user flow
+  - **Square Button**: Change cleaning profile anytime
+  - **Seamless switching** between profile modes
+  - **Persistent profile memory** during session
+
+### Technical
+- Added PROFILE_QUICK, PROFILE_COMPLETE, PROFILE_SELECTIVE enum system
+- Dynamic menu initialization with profile parameter
+- Persistent counter file management
+- Enhanced download path coverage (now 95 cleaning paths total)
+- Improved text positioning calculations for perfect centering
+
+---
+
 ## [1.02] - 2025-10-01
 
 ### Added

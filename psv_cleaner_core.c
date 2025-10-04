@@ -20,7 +20,7 @@ const char *TEMP_PATHS[] = {
     "ur0:temp/",
     "ur0:temp/sqlite/",
     "uma0:temp/",
-    
+
     // VitaShell cleanup
     "ux0:VitaShell/cache/",
     "ux0:VitaShell/temp/",
@@ -28,14 +28,14 @@ const char *TEMP_PATHS[] = {
     "ux0:VitaShell/recent/",
     "ux0:VitaShell/backup/temp/",
     "ux0:VitaShell/trash/",
-    
+
     // PKGi cleanup
     "ux0:pkgi/tmp/",
     "ux0:pkgi/cache/",
     "ux0:pkgi/log.txt",
     "ux0:pkgi/downloads/temp/",
     "ux0:pkgi/backup/temp/",
-    
+
     // RetroArch cleanup (cache and logs only, never saves or configs)
     "ux0:data/retroarch/cache/",
     "ux0:data/retroarch/logs/",
@@ -43,109 +43,111 @@ const char *TEMP_PATHS[] = {
     "ux0:data/retroarch/thumbnails/cache/",
     "ux0:data/retroarch/shaders/cache/",
     "ux0:data/retroarch/database/rdb/temp/",
-    
+
     // PSP Emulator cleanup
     "ux0:pspemu/temp/",
     "ux0:pspemu/cache/",
-    
+
     // Adrenaline PSP emulator cleanup
     "ux0:data/Adrenaline/cache/",
     "ux0:data/Adrenaline/logs/",
     "ux0:data/Adrenaline/temp/",
     "ux0:data/Adrenaline/crash/",
     "ux0:data/Adrenaline/dumps/",
-    
+
     // Homebrew applications - Moonlight
     "ux0:data/moonlight/cache/",
     "ux0:data/moonlight/logs/",
-    
+
     // Homebrew applications - Autoplugin
     "ux0:data/autoplugin/cache/",
     "ux0:data/autoplugin/logs/",
     "ux0:data/autoplugin2/cache/",
     "ux0:data/autoplugin2/logs/",
-    
+
     // Homebrew applications - Henkaku
     "ux0:data/henkaku/cache/",
     "ux0:data/henkaku/logs/",
-    
+
     // Homebrew applications - VitaGrafix
     "ux0:data/VitaGrafix/cache/",
     "ux0:data/VitaGrafix/logs/",
-    
+
     // Homebrew applications - reF00D
     "ux0:data/reF00D/cache/",
-    
+
     // Homebrew applications - NoNpDrm
     "ux0:data/NoNpDrm/temp/",
-    
+
     // Homebrew applications - 0syscall6
     "ux0:data/0syscall6/cache/",
-    
+
     // Homebrew applications - TAI plugin system
     "ux0:data/tai/cache/",
-    
+
     // Homebrew applications - PSVshell
     "ux0:data/PSVshell/logs/",
     "ux0:data/PSVshell/cache/",
-    
+
     // Homebrew applications - SaveManager
     "ux0:data/savemgr/log/",
-    
+
     // Homebrew applications - VitaCheat
     "ux0:data/vitacheat/logs/",
-    
+
     // Homebrew applications - rinCheat
     "ux0:data/rinCheat/logs/",
-    
+
     // Homebrew applications - TropHAX
     "ux0:data/TropHAX/logs/",
-    
+
     // Browser and webkit cache
     "ux0:data/browser/cache/",
     "ux0:data/browser/temp/",
     "ux0:data/browser/logs/",
     "ux0:data/webkit/cache/",
     "ux0:data/webkit/localstorage/temp/",
-    
+
     // Network temporary files
     "ux0:data/net/temp/",
-    
-    // Download cleanup (safe temp files only)
+
+    // Download cleanup (complete directories and temp files)
+    "ux0:download/",
     "ux0:download/temp/",
+    "ux0:downloads/",
     "ux0:downloads/temp/",
     "ux0:bgdl/t/",
-    
+
     // Package and installation temporary files
     "ux0:data/pkg/temp/",
     "ux0:package/temp/",
     "ux0:appmeta/temp/",
     "ur0:appmeta/temp/",
     "ux0:license/temp/",
-    
+
     // System update and patch cleanup (safe temp files)
     "ux0:patch_temp/",
     "ux0:update_temp/",
-    
+
     // Media thumbnails (regenerable)
     "ux0:picture/.thumbnails/",
     "ux0:video/.thumbnails/",
     "ux0:music/.cache/",
     "ux0:photo/cache/",
-    
+
     // Shader logs
     "ux0:shaderlog/",
-    
+
     // Additional log folders (safe)
     "ux0:data/logs/temp/",
     "ux0:data/cache/",
-    
+
     // USB and external storage cleanup (safe)
     "uma0:cache/",
     "uma0:log/",
     "uma0:data/temp/",
     "uma0:data/cache/",
-    
+
     // Crash dump files (safe to delete - never contains user data)
     "ux0:data/psp2core*",
     "ux0:data/*.psp2core",
@@ -162,6 +164,28 @@ const size_t TEMP_PATHS_COUNT = sizeof(TEMP_PATHS)/sizeof(TEMP_PATHS[0]);
 // Get deleted files count
 int getDeletedFilesCount() {
     return g_deletedFilesCount;
+}
+
+// Load cleanup counter from file
+int loadCleanupCounter() {
+    int count = 0;
+    SceUID fd = sceIoOpen("ux0:data/PSV_Cleaner/counter.txt", SCE_O_RDONLY, 0777);
+    if (fd >= 0) {
+        sceIoRead(fd, &count, sizeof(int));
+        sceIoClose(fd);
+    }
+    return count;
+}
+
+// Save cleanup counter to file
+void saveCleanupCounter(int count) {
+    // Ensure directory exists
+    sceIoMkdir("ux0:data/PSV_Cleaner", 0777);
+    SceUID fd = sceIoOpen("ux0:data/PSV_Cleaner/counter.txt", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+    if (fd >= 0) {
+        sceIoWrite(fd, &count, sizeof(int));
+        sceIoClose(fd);
+    }
 }
 
 // Reset deleted files count
@@ -282,18 +306,19 @@ unsigned long long calculateTempSizeRecursive(const char *path) {
     SceUID dfd;
     SceIoDirent dir;
     memset(&dir, 0, sizeof(SceIoDirent));
-    
+
+    // First try to open as directory
     dfd = sceIoDopen(path);
     if (dfd >= 0) {
         while (sceIoDread(dfd, &dir) > 0) {
             if (strcmp(dir.d_name, ".") == 0 || strcmp(dir.d_name, "..") == 0)
                 continue;
-                
+
             char newPath[1024];
             snprintf(newPath, sizeof(newPath), "%s%s%s", path,
                      (path[strlen(path)-1] == '/') ? "" : "/",
                      dir.d_name);
-            
+
             if (SCE_S_ISDIR(dir.d_stat.st_mode)) {
                 // Recursively calculate subdirectory size
                 total += calculateTempSizeRecursive(newPath);
@@ -304,15 +329,16 @@ unsigned long long calculateTempSizeRecursive(const char *path) {
         }
         sceIoDclose(dfd);
     } else {
-        // Try as a single file
+        // If not a directory, try as a single file
         SceIoStat stat;
         if (sceIoGetstat(path, &stat) >= 0) {
-            if (!SCE_S_ISDIR(stat.st_mode)) {
+            if (SCE_S_ISREG(stat.st_mode)) { // Regular file
                 total += stat.st_size;
             }
         }
+        // If path doesn't exist at all, just return 0 (don't fail)
     }
-    
+
     return total;
 }
 
@@ -321,7 +347,8 @@ unsigned long long calculateTempSize() {
     unsigned long long total = 0;
     for(size_t i=0;i<TEMP_PATHS_COUNT;i++){
         // Continue with calculation (PS Vita handles suspension automatically)
-        total += calculateTempSizeRecursive(TEMP_PATHS[i]);
+        unsigned long long pathSize = calculateTempSizeRecursive(TEMP_PATHS[i]);
+        total += pathSize;
     }
     return total;
 }
@@ -383,7 +410,7 @@ void freeFileList(FileList *list) {
 // Add file to list
 void addFileToList(FileList *list, const char *path, unsigned long long size) {
     if (!list || !path) return;
-    
+
     // Expand array if needed
     if (list->count >= list->capacity) {
         list->capacity *= 2;
@@ -391,7 +418,7 @@ void addFileToList(FileList *list, const char *path, unsigned long long size) {
         if (!newFiles) return; // Out of memory
         list->files = newFiles;
     }
-    
+
     // Add file info
     strncpy(list->files[list->count].path, path, sizeof(list->files[list->count].path) - 1);
     list->files[list->count].path[sizeof(list->files[list->count].path) - 1] = '\0';

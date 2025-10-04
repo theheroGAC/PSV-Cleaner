@@ -120,11 +120,18 @@ typedef struct {
     int selectedFile;
 } PreviewState;
 
-// Initialize menu options
-void initMenuOptions(MenuOptions *menu) {
+// Cleaning profiles
+typedef enum {
+    PROFILE_QUICK = 0,    // Cache only
+    PROFILE_COMPLETE,     // Everything
+    PROFILE_SELECTIVE     // Categories chosen by user
+} CleaningProfile;
+
+// Initialize menu options with profile-based defaults
+void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
     menu->selected = 0;
     menu->total_options = 9;
-    
+
     strcpy(menu->options[0], "System Temp Files");
     strcpy(menu->options[1], "VitaShell Cache");
     strcpy(menu->options[2], "PKGi Cache");
@@ -134,41 +141,141 @@ void initMenuOptions(MenuOptions *menu) {
     strcpy(menu->options[6], "Crash Dumps");
     strcpy(menu->options[7], "Exclusion Settings");
     strcpy(menu->options[8], "All Categories");
-    
-    // All options enabled by default
-    for (int i = 0; i < 9; i++) {
-        menu->enabled[i] = 1;
+
+    // Initialize based on profile
+    switch (profile) {
+        case PROFILE_QUICK:  // Cache only
+            menu->enabled[0] = 0; // No system temp
+            menu->enabled[1] = 1; // VitaShell cache
+            menu->enabled[2] = 1; // PKGi cache
+            menu->enabled[3] = 1; // RetroArch cache
+            menu->enabled[4] = 1; // Autoplugin cache
+            menu->enabled[5] = 1; // Adrenaline cache
+            menu->enabled[6] = 0; // No crash dumps
+            menu->enabled[7] = 1; // Exclusion settings
+            menu->enabled[8] = 0; // Will be calculated
+            break;
+
+        case PROFILE_COMPLETE:  // Everything
+            for (int i = 0; i < 9; i++) {
+                menu->enabled[i] = 1;
+            }
+            break;
+
+        case PROFILE_SELECTIVE:  // User chooses
+            for (int i = 0; i < 9; i++) {
+                menu->enabled[i] = 0; // Start with nothing selected
+            }
+            menu->enabled[7] = 1; // Exclusion settings always on
+            break;
     }
 }
 
 // Draw options menu
 void drawOptionsMenu(vita2d_pgf *font, MenuOptions *menu) {
-    // Draw background
-    vita2d_draw_rectangle(150, 100, 660, 400, RGBA(20, 30, 50, 240));
+    // Draw background with gradient effect (using multiple rectangles)
+    vita2d_draw_rectangle(0, 0, 960, 544, RGBA(10, 15, 25, 200));
     
-    // Draw title
-    vita2d_pgf_draw_text(font, 480 - 100, 130, RGBA(255, 255, 255, 255), 1.8f, "Cleaning Options");
+    // Draw main panel with border
+    vita2d_draw_rectangle(100, 60, 760, 450, RGBA(0, 120, 200, 100)); // Outer border
+    vita2d_draw_rectangle(105, 65, 750, 440, RGBA(20, 30, 50, 250)); // Main panel
     
-    // Draw options
+    // Draw title bar
+    vita2d_draw_rectangle(105, 65, 750, 50, RGBA(0, 100, 180, 200));
+    vita2d_draw_rectangle(105, 65, 750, 3, RGBA(0, 200, 255, 255)); // Top accent
+    vita2d_pgf_draw_text(font, 480 - 120, 95, RGBA(255, 255, 255, 255), 1.8f, "Advanced Cleaning Options");
+    
+    // Draw subtitle
+    vita2d_pgf_draw_text(font, 480 - 180, 135, RGBA(200, 200, 200, 255), 0.9f, "Select which categories to clean (X to toggle)");
+    
+    // Draw options list background
+    vita2d_draw_rectangle(120, 155, 720, 310, RGBA(15, 25, 40, 200));
+    
+    // Draw options with improved styling
     for (int i = 0; i < menu->total_options; i++) {
-        int y = 180 + (i * 40);
-        int color = (i == menu->selected) ? RGBA(100, 200, 255, 255) : RGBA(255, 255, 255, 255);
-        int bg_color = (i == menu->selected) ? RGBA(50, 100, 150, 100) : RGBA(0, 0, 0, 0);
+        int y = 175 + (i * 34);
+        int isSelected = (i == menu->selected);
         
-        // Draw selection background
-        if (i == menu->selected) {
-            vita2d_draw_rectangle(160, y - 5, 640, 30, bg_color);
+        // Draw selection highlight with animation effect
+        if (isSelected) {
+            // Highlight bar with gradient effect
+            vita2d_draw_rectangle(125, y - 2, 710, 30, RGBA(0, 150, 255, 80));
+            vita2d_draw_rectangle(125, y - 2, 5, 30, RGBA(0, 200, 255, 255)); // Left accent bar
         }
         
-        // Draw option text (centered vertically in the selection bar)
-        char optionText[128];
-        snprintf(optionText, sizeof(optionText), "%s %s", 
-                menu->enabled[i] ? "[X]" : "[ ]", menu->options[i]);
-        vita2d_pgf_draw_text(font, 180, y + 10, color, 1.0f, optionText);
+        // Draw checkbox with better styling
+        int checkboxX = 145;
+        int checkboxY = y + 3;
+        
+        // Checkbox background
+        vita2d_draw_rectangle(checkboxX, checkboxY, 20, 20, RGBA(40, 60, 80, 255));
+        vita2d_draw_rectangle(checkboxX + 1, checkboxY + 1, 18, 18, RGBA(20, 30, 45, 255));
+        
+        // Special handling for "All Categories" option - show state based on other options
+        int shouldShowChecked = menu->enabled[i];
+        if (i == 8) {
+            // For "All Categories", show checked if all CLEANING options are enabled (exclude "Exclusion Settings")
+            shouldShowChecked = 1;
+            for (int j = 0; j < 7; j++) { // Only check first 7 options (exclude "Exclusion Settings")
+                if (!menu->enabled[j]) {
+                    shouldShowChecked = 0;
+                    break;
+                }
+            }
+        }
+
+        if (shouldShowChecked) {
+            // Draw checkmark
+            vita2d_draw_rectangle(checkboxX + 4, checkboxY + 4, 12, 12, RGBA(0, 255, 100, 255));
+            vita2d_draw_rectangle(checkboxX + 5, checkboxY + 5, 10, 10, RGBA(0, 200, 80, 255));
+        }
+        
+        // Draw option text with better color coding
+        int textColor = isSelected ? RGBA(255, 255, 255, 255) : RGBA(200, 200, 200, 255);
+        vita2d_pgf_draw_text(font, 175, y + 18, textColor, 1.1f, menu->options[i]);
+        
+        // Draw category icon/indicator
+        if (i < 7) { // Regular categories
+            vita2d_draw_rectangle(780, y + 6, 35, 16, RGBA(0, 150, 200, 150));
+            
+            // Show estimated size indicator (placeholder)
+            const char* sizeIndicators[] = {"~", "~~", "~", "~~", "~", "~~", "~"};
+            vita2d_pgf_draw_text(font, 785, y + 17, RGBA(255, 255, 150, 255), 0.8f, sizeIndicators[i]);
+        } else if (i == 8) { // "All Categories" option
+        }
     }
     
-    // Draw instructions (moved to bottom to avoid overlap with all options)
-    vita2d_pgf_draw_text(font, 180, 540, RGBA(200, 200, 200, 255), 0.8f, "D-Pad: navigate | X: toggle | O: start | △: exit");
+    // Draw bottom section with instructions
+    vita2d_draw_rectangle(105, 475, 750, 30, RGBA(15, 25, 40, 220));
+    vita2d_draw_rectangle(105, 475, 750, 2, RGBA(0, 150, 255, 255)); // Top border
+    
+    // Draw control instructions with icons
+    int instrY = 493;
+    
+    // D-Pad icon
+    vita2d_draw_rectangle(125, instrY - 10, 22, 22, RGBA(80, 120, 180, 200));
+    vita2d_pgf_draw_text(font, 127, instrY + 3, RGBA(255, 255, 255, 255), 0.8f, "↕");
+    vita2d_pgf_draw_text(font, 155, instrY + 3, RGBA(220, 220, 220, 255), 0.9f, "Navigate");
+    
+    // X button
+    vita2d_draw_rectangle(265, instrY - 10, 22, 22, RGBA(80, 120, 180, 200));
+    vita2d_pgf_draw_text(font, 270, instrY + 3, RGBA(255, 255, 255, 255), 0.8f, "X");
+    vita2d_pgf_draw_text(font, 295, instrY + 3, RGBA(220, 220, 220, 255), 0.9f, "Toggle Option");
+
+    // Select button (hidden as requested)
+    // vita2d_draw_rectangle(525, instrY - 10, 22, 22, RGBA(80, 120, 180, 200));
+    // vita2d_pgf_draw_text(font, 530, instrY + 3, RGBA(255, 255, 255, 255), 0.8f, "■");
+    // vita2d_pgf_draw_text(font, 555, instrY + 3, RGBA(220, 220, 220, 255), 0.9f, "Select All");
+    
+    // O button
+    vita2d_draw_rectangle(445, instrY - 10, 22, 22, RGBA(80, 120, 180, 200));
+    vita2d_pgf_draw_text(font, 450, instrY + 3, RGBA(255, 255, 255, 255), 0.8f, "O");
+    vita2d_pgf_draw_text(font, 475, instrY + 3, RGBA(220, 220, 220, 255), 0.9f, "Start Cleaning");
+    
+    // Triangle button
+    vita2d_draw_rectangle(645, instrY - 10, 22, 22, RGBA(80, 120, 180, 200));
+    vita2d_pgf_draw_text(font, 649, instrY + 3, RGBA(255, 255, 255, 255), 0.8f, "△");
+    vita2d_pgf_draw_text(font, 675, instrY + 3, RGBA(220, 220, 220, 255), 0.9f, "Back to Menu");
 }
 
 // Draw preview screen
@@ -176,8 +283,8 @@ void drawPreviewScreen(vita2d_pgf *font, PreviewState *preview) {
     // Draw background
     vita2d_draw_rectangle(0, 0, 960, 544, RGBA(15, 25, 40, 255));
     
-    // Draw title
-    vita2d_pgf_draw_text(font, 480 - 120, 40, RGBA(255, 255, 255, 255), 1.8f, "Preview - Files to Delete");
+    // Draw title - centered
+    vita2d_pgf_draw_text(font, 480 - 110, 40, RGBA(255, 255, 255, 255), 1.8f, "Preview - Files to Delete");
     
     if (!preview->fileList || preview->fileList->count == 0) {
         // No files found
@@ -255,10 +362,15 @@ void drawPreviewScreen(vita2d_pgf *font, PreviewState *preview) {
         }
     }
     
-    // Draw instructions
+    // Draw instructions - different text if no files found
     vita2d_draw_rectangle(0, 510, 960, 34, RGBA(20, 30, 50, 220));
-    vita2d_pgf_draw_text(font, 30, 530, RGBA(200, 200, 200, 255), 0.8f, 
-                        "D-Pad: scroll | X: Start cleaning | O: Cancel");
+    if (!preview->fileList || preview->fileList->count == 0) {
+        vita2d_pgf_draw_text(font, 30, 530, RGBA(200, 200, 200, 255), 0.8f,
+                            "O: Cancel");
+    } else {
+        vita2d_pgf_draw_text(font, 30, 530, RGBA(200, 200, 200, 255), 0.8f,
+                            "D-Pad: scroll | X: Start cleaning | O: Cancel");
+    }
     
     // Draw borders
     vita2d_draw_rectangle(0, 0, 960, 2, RGBA(0, 150, 255, 255));
@@ -291,19 +403,21 @@ int main() {
     }
     showSplash(splash);
 
-    // Calculate freeable space
+    // Calculate initial freeable space immediately after splash
     unsigned long long spaceBefore = calculateTempSize();
     char freeText[128];
-    if (spaceBefore < (1024 * 1024))
+    if (spaceBefore == 0) {
+        strcpy(freeText, "Space to free: 0 KB");
+    } else if (spaceBefore < (1024 * 1024))
         snprintf(freeText, sizeof(freeText), "Space to free: %llu KB", spaceBefore / 1024);
     else if (spaceBefore < (1024ULL * 1024 * 1024))
         snprintf(freeText, sizeof(freeText), "Space to free: %.2f MB", spaceBefore / (1024.0 * 1024));
     else
         snprintf(freeText, sizeof(freeText), "Space to free: %.2f GB", spaceBefore / (1024.0 * 1024 * 1024));
 
-    // Initialize menu options
+    // Initialize menu options with default profile
     MenuOptions menu;
-    initMenuOptions(&menu);
+    initMenuOptions(&menu, PROFILE_COMPLETE); // Default to complete cleanup
     
     // Initialize preview state
     PreviewState preview;
@@ -313,6 +427,8 @@ int main() {
     
     int showMenu = 0;
     int showPreview = 0;
+    int showProfileSelect = 1; // Start with profile selection
+    CleaningProfile selectedProfile = PROFILE_COMPLETE;
     int running = 1;
     while (running) {
         sceCtrlPeekBufferPositive(0, &pad, 1);
@@ -320,38 +436,141 @@ int main() {
         // Check if app was suspended (PS Vita doesn't have sceKernelIsExitRequested)
         // Use controller input to handle exit
 
+        // Refresh space calculation when on main screen (not in menu or preview)
+        if (!showMenu && !showPreview) {
+            unsigned long long currentSpace = calculateTempSize();
+            if (currentSpace != spaceBefore || spaceBefore == 0) {
+                spaceBefore = currentSpace;
+                if (spaceBefore == 0) {
+                    strcpy(freeText, "Space to free: 0 KB");
+                } else if (spaceBefore < (1024 * 1024))
+                    snprintf(freeText, sizeof(freeText), "Space to free: %llu KB", spaceBefore / 1024);
+                else if (spaceBefore < (1024ULL * 1024 * 1024))
+                    snprintf(freeText, sizeof(freeText), "Space to free: %.2f MB", spaceBefore / (1024.0 * 1024));
+                else
+                    snprintf(freeText, sizeof(freeText), "Space to free: %.2f GB", spaceBefore / (1024.0 * 1024 * 1024));
+            }
+        }
+
         vita2d_start_drawing();
         vita2d_clear_screen();
 
         // Draw simple background (GPU friendly)
         vita2d_draw_rectangle(0, 0, 960, 544, RGBA(20, 30, 50, 255));
 
-        // Draw main title with shadow and border effect
-        vita2d_pgf_draw_text(font, 480 - 98, 82, RGBA(0, 0, 0, 150), 2.2f, "PSV Cleaner"); // Shadow
-        vita2d_pgf_draw_text(font, 480 - 100, 80, RGBA(100, 200, 255, 255), 2.2f, "PSV Cleaner"); // Main text with blue tint
-        
-        // Draw subtitle
-        vita2d_pgf_draw_text(font, 480 - 140, 120, RGBA(200, 200, 200, 255), 1.1f, "Temporary Files Cleaner for PS Vita");
+        // Draw main title - centered
+        vita2d_pgf_draw_text(font, 480 - 90, 82, RGBA(0, 0, 0, 150), 2.2f, "PSV Cleaner"); // Shadow
+        vita2d_pgf_draw_text(font, 480 - 92, 80, RGBA(100, 200, 255, 255), 2.2f, "PSV Cleaner"); // Main text with blue tint
 
-        if (showPreview) {
+        // Draw subtitle - centered
+        vita2d_pgf_draw_text(font, 480 - 115, 120, RGBA(200, 200, 200, 255), 1.1f, "Temporary Files Cleaner for PS Vita");
+
+        if (showProfileSelect) {
+            // Draw profile selection screen
+            // Draw title for profile selection
+            vita2d_pgf_draw_text(font, 480 - 160, 160, RGBA(255, 255, 255, 255), 1.6f, "Select Cleaning Profile");
+
+            // Profile options
+            const char* profiles[3] = {
+                "Quick Clean - Safe cache files only",
+                "Complete Clean - All temporary files",
+                "Selective Clean - Choose what to clean"
+            };
+
+            for (int i = 0; i < 3; i++) {
+                int y = 220 + (i * 80);
+                int isSelected = (i == (int)selectedProfile);
+
+                // Draw profile box
+                vita2d_draw_rectangle(150, y - 10, 660, 60, RGBA(30, 50, 70, 200));
+                if (isSelected) {
+                    vita2d_draw_rectangle(150, y - 10, 660, 60, RGBA(0, 150, 255, 100));
+                    vita2d_draw_rectangle(150, y - 8, 4, 56, RGBA(0, 200, 255, 255));
+                }
+
+                // Draw profile name
+                vita2d_pgf_draw_text(font, 180, y + 10, RGBA(255, 255, 255, 255), 1.2f, profiles[i]);
+
+                // Draw profile description
+                if (i == 0) {
+                    vita2d_pgf_draw_text(font, 180, y + 35, RGBA(180, 180, 200, 255), 0.8f, "Removes app caches, browser temp, logs (fast & safe)");
+                } else if (i == 1) {
+                    vita2d_pgf_draw_text(font, 180, y + 35, RGBA(180, 180, 200, 255), 0.8f, "Removes all temp files, crash dumps, system cache");
+                } else {
+                    vita2d_pgf_draw_text(font, 180, y + 35, RGBA(180, 180, 200, 255), 0.8f, "Manually choose which categories to clean");
+                }
+            }
+
+            // Draw instructions
+            vita2d_draw_rectangle(0, 500, 960, 44, RGBA(15, 25, 40, 220));
+            vita2d_pgf_draw_text(font, 30, 525, RGBA(200, 200, 200, 255), 0.9f, "D-Pad: Navigate | X: Select Profile | O: Exit");
+        } else if (showPreview) {
             // Draw preview screen
             drawPreviewScreen(font, &preview);
         } else if (showMenu) {
             // Draw options menu
             drawOptionsMenu(font, &menu);
         } else {
-            // Draw info box background (single rectangle for better performance)
-            vita2d_draw_rectangle(200, 200, 560, 200, RGBA(25, 35, 55, 220));
+            // Draw enhanced info box with borders
+            // Outer border (accent color)
+            vita2d_draw_rectangle(195, 175, 570, 260, RGBA(0, 150, 255, 100));
+            // Main background
+            vita2d_draw_rectangle(200, 180, 560, 250, RGBA(25, 35, 55, 240));
+            
+            // Draw top decorative line
+            vita2d_draw_rectangle(200, 180, 560, 3, RGBA(0, 200, 255, 255));
 
-            // Draw space info with icon
-            vita2d_pgf_draw_text(font, 220, 240, RGBA(100, 255, 100, 255), 1.0f, "Space to free:");
-            vita2d_pgf_draw_text(font, 220, 270, RGBA(255, 255, 255, 255), 1.2f, freeText);
+            // Draw storage icon (stylized disk/folder)
+            vita2d_draw_rectangle(220, 210, 50, 45, RGBA(0, 150, 255, 150));
+            vita2d_draw_rectangle(225, 215, 40, 35, RGBA(40, 60, 80, 255));
+            vita2d_draw_rectangle(230, 220, 30, 25, RGBA(0, 180, 255, 200));
+            
+            // Draw status info instead of initial space calculation
+            vita2d_pgf_draw_text(font, 290, 220, RGBA(100, 255, 255, 255), 1.0f, "System Status:");
+            vita2d_pgf_draw_text(font, 290, 250, RGBA(255, 255, 100, 255), 1.4f, "Ready for Cleanup");
 
-            // Draw instructions with better styling
-            vita2d_pgf_draw_text(font, 220, 320, RGBA(255, 255, 100, 255), 1.1f, "Controls:");
-            vita2d_pgf_draw_text(font, 220, 350, RGBA(255, 255, 255, 255), 1.0f, "X - Start cleaning");
-            vita2d_pgf_draw_text(font, 220, 380, RGBA(255, 255, 255, 255), 1.0f, "△ - Options");
-            vita2d_pgf_draw_text(font, 220, 410, RGBA(255, 255, 255, 255), 1.0f, "O - Exit application");
+            // Draw separator line
+            vita2d_draw_rectangle(220, 280, 520, 2, RGBA(0, 150, 255, 150));
+
+// Draw controls section with icons
+vita2d_pgf_draw_text(font, 220, 310, RGBA(100, 200, 255, 255), 1.2f, "Controls:");
+
+// Draw control buttons with background - centered symbols
+// Square button
+vita2d_draw_rectangle(240, 330, 25, 25, RGBA(100, 150, 255, 200));
+vita2d_pgf_draw_text(font, 243, 348, RGBA(255, 255, 255, 255), 1.0f, "■");
+vita2d_pgf_draw_text(font, 285, 348, RGBA(255, 255, 255, 255), 0.9f, "Change Profile");
+
+// X button
+vita2d_draw_rectangle(240, 350, 25, 25, RGBA(100, 150, 255, 200));
+vita2d_pgf_draw_text(font, 245, 368, RGBA(255, 255, 255, 255), 1.0f, "X");
+vita2d_pgf_draw_text(font, 285, 368, RGBA(255, 255, 255, 255), 0.9f, "Preview & Clean");
+
+// Triangle button
+vita2d_draw_rectangle(240, 370, 25, 25, RGBA(100, 150, 255, 200));
+vita2d_pgf_draw_text(font, 245, 388, RGBA(255, 255, 255, 255), 1.0f, "△");
+vita2d_pgf_draw_text(font, 285, 388, RGBA(255, 255, 255, 255), 0.9f, "Advanced Options");
+
+// Circle button
+vita2d_draw_rectangle(240, 390, 25, 25, RGBA(100, 150, 255, 200));
+vita2d_pgf_draw_text(font, 245, 408, RGBA(255, 255, 255, 255), 1.0f, "O");
+vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, "Exit App");
+            
+            // Draw version and footer info
+            vita2d_draw_rectangle(0, 470, 960, 74, RGBA(15, 25, 40, 200));
+            vita2d_draw_rectangle(0, 470, 960, 2, RGBA(0, 150, 255, 255));
+            
+            // Version info
+            vita2d_pgf_draw_text(font, 30, 495, RGBA(150, 200, 255, 255), 0.9f, "Version 1.03");
+            
+            // Quick stats in footer
+            char statsText[128];
+            snprintf(statsText, sizeof(statsText), "Ready to clean temporary files and optimize your PS Vita");
+            vita2d_pgf_draw_text(font, 30, 520, RGBA(180, 180, 180, 255), 0.85f, statsText);
+            
+            // Draw tip on the right side
+            vita2d_pgf_draw_text(font, 600, 495, RGBA(255, 255, 150, 255), 0.85f, "Tip: Use Preview to see");
+            vita2d_pgf_draw_text(font, 600, 520, RGBA(255, 255, 150, 255), 0.85f, "files before cleaning");
         }
 
         // Draw decorative elements
@@ -366,7 +585,29 @@ int main() {
         // GPU memory cleanup every frame to prevent crashes
         gpuMemoryCleanup();
 
-        if (showPreview) {
+        if (showProfileSelect) {
+            // Handle profile selection
+            if (pad.buttons & SCE_CTRL_UP) {
+                selectedProfile = (CleaningProfile)((int)selectedProfile - 1);
+                if ((int)selectedProfile < 0) selectedProfile = PROFILE_SELECTIVE;
+                sceKernelDelayThread(200 * 1000);
+            }
+            if (pad.buttons & SCE_CTRL_DOWN) {
+                selectedProfile = (CleaningProfile)((int)selectedProfile + 1);
+                if ((int)selectedProfile > 2) selectedProfile = PROFILE_QUICK;
+                sceKernelDelayThread(200 * 1000);
+            }
+            if (pad.buttons & SCE_CTRL_CROSS) {
+                // Confirm profile selection
+                showProfileSelect = 0;
+                initMenuOptions(&menu, selectedProfile);
+                sceKernelDelayThread(200 * 1000);
+            }
+            if (pad.buttons & SCE_CTRL_CIRCLE) {
+                // Exit app
+                running = 0;
+            }
+        } else if (showPreview) {
             // Handle preview navigation
             if (pad.buttons & SCE_CTRL_UP) {
                 if (preview.selectedFile > 0) {
@@ -387,87 +628,105 @@ int main() {
                 sceKernelDelayThread(100 * 1000);
             }
             if (pad.buttons & SCE_CTRL_CROSS) {
-                // Start cleaning
-                showPreview = 0;
-                
-                // Start cleaning with progress bar
-                for (int pct = 0; pct <= 100; pct++) {
-                    vita2d_start_drawing();
-                    vita2d_clear_screen();
-                    drawProgressBar(font, pct);
-                    vita2d_end_drawing();
-                    vita2d_swap_buffers();
-                    sceKernelDelayThread(50 * 1000);
-                    
-                    // Check if user presses Circle to exit during cleaning
-                    sceCtrlPeekBufferPositive(0, &pad, 1);
-                    if (pad.buttons & SCE_CTRL_CIRCLE) {
-                        running = 0;
-                        break;
+                // Only start cleaning if there are files to delete
+                if (preview.fileList && preview.fileList->count > 0) {
+                    // Start cleaning
+                    showPreview = 0;
+
+                    // Start cleaning with progress bar
+                    for (int pct = 0; pct <= 100; pct++) {
+                        vita2d_start_drawing();
+                        vita2d_clear_screen();
+                        drawProgressBar(font, pct);
+                        vita2d_end_drawing();
+                        vita2d_swap_buffers();
+                        sceKernelDelayThread(50 * 1000);
+
+                        // Check if user presses Circle to exit during cleaning
+                        sceCtrlPeekBufferPositive(0, &pad, 1);
+                        if (pad.buttons & SCE_CTRL_CIRCLE) {
+                            running = 0;
+                            break;
+                        }
                     }
-                }
 
-                if (running) {
-                    unsigned long long spaceFreed = cleanTemporaryFiles();
-                    int filesDeleted = getDeletedFilesCount();
-                    
-                    // Recalculate space after cleaning
-                    spaceBefore = calculateTempSize();
-                    if (spaceBefore < (1024 * 1024))
-                        snprintf(freeText, sizeof(freeText), "Space to free: %llu KB", spaceBefore / 1024);
-                    else if (spaceBefore < (1024ULL * 1024 * 1024))
-                        snprintf(freeText, sizeof(freeText), "Space to free: %.2f MB", spaceBefore / (1024.0 * 1024));
-                    else
-                        snprintf(freeText, sizeof(freeText), "Space to free: %.2f GB", spaceBefore / (1024.0 * 1024 * 1024));
-                    
-                    // Format space freed text
-                    char spaceText[128];
-                    if (spaceFreed < (1024 * 1024))
-                        snprintf(spaceText, sizeof(spaceText), "Space Freed: %llu KB", spaceFreed / 1024);
-                    else if (spaceFreed < (1024ULL * 1024 * 1024))
-                        snprintf(spaceText, sizeof(spaceText), "Space Freed: %.2f MB", spaceFreed / (1024.0 * 1024));
-                    else
-                        snprintf(spaceText, sizeof(spaceText), "Space Freed: %.2f GB", spaceFreed / (1024.0 * 1024 * 1024));
+                    if (running) {
+                        // Increment cleanup counter and save
+                        int cleanupCount = loadCleanupCounter() + 1;
+                        saveCleanupCounter(cleanupCount);
 
-                    // Play success sound
-                    playSuccessSound();
-                    
-                    // Show notification
-                    showNotification("PSV Cleaner", "Cleaning completed successfully!");
+                        // Use preview size as more accurate measurement for space freed
+                        unsigned long long spaceFreedFromPreview = (preview.fileList ? preview.fileList->totalSize : 0);
 
-                    // Draw success screen with statistics
-                    vita2d_start_drawing();
-                    vita2d_clear_screen();
-                    vita2d_draw_rectangle(0, 0, 960, 544, RGBA(15, 25, 40, 255));
-                    
-                    // Draw success icon/checkmark effect
-                    vita2d_draw_rectangle(430, 140, 100, 100, RGBA(0, 200, 0, 100));
-                    
-                    // Draw title
-                    vita2d_pgf_draw_text(font, 480 - 150, 180, RGBA(0, 255, 0, 255), 1.8f, "Cleaning Completed!");
-                    
-                    // Draw statistics
-                    vita2d_pgf_draw_text(font, 480 - 100, 260, RGBA(255, 255, 255, 255), 1.2f, spaceText);
-                    
-                    char filesText[64];
-                    snprintf(filesText, sizeof(filesText), "Files Deleted: %d", filesDeleted);
-                    vita2d_pgf_draw_text(font, 480 - 100, 300, RGBA(255, 255, 255, 255), 1.2f, filesText);
-                    
-                    // Draw decorative line
-                    vita2d_draw_rectangle(330, 240, 300, 2, RGBA(0, 200, 0, 255));
-                    
-                    vita2d_end_drawing();
-                    vita2d_swap_buffers();
-                    sceKernelDelayThread(3 * 1000 * 1000); // 3 seconds
+                        // Perform cleaning
+                        cleanTemporaryFiles();
+
+                        // Save deleted file count for display
+                        int filesDeleted = getDeletedFilesCount();
+
+                        // Recalculate space after cleaning
+                        spaceBefore = calculateTempSize();
+                        if (spaceBefore < (1024 * 1024))
+                            snprintf(freeText, sizeof(freeText), "Space to free: %llu KB", spaceBefore / 1024);
+                        else if (spaceBefore < (1024ULL * 1024 * 1024))
+                            snprintf(freeText, sizeof(freeText), "Space to free: %.2f MB", spaceBefore / (1024.0 * 1024));
+                        else
+                            snprintf(freeText, sizeof(freeText), "Space to free: %.2f GB", spaceBefore / (1024.0 * 1024 * 1024));
+
+                        // Format space freed text using preview totals
+                        char spaceText[128];
+                        if (spaceFreedFromPreview < (1024 * 1024))
+                            snprintf(spaceText, sizeof(spaceText), "Space Freed: %llu KB", spaceFreedFromPreview / 1024);
+                        else if (spaceFreedFromPreview < (1024ULL * 1024 * 1024))
+                            snprintf(spaceText, sizeof(spaceText), "Space Freed: %.2f MB", spaceFreedFromPreview / (1024.0 * 1024));
+                        else
+                            snprintf(spaceText, sizeof(spaceText), "Space Freed: %.2f GB", spaceFreedFromPreview / (1024.0 * 1024 * 1024));
+
+                        // Play success sound
+                        playSuccessSound();
+
+                        // Show notification
+                        showNotification("PSV Cleaner", "Cleaning completed successfully!");
+
+                        // Draw success screen with statistics
+                        vita2d_start_drawing();
+                        vita2d_clear_screen();
+                        vita2d_draw_rectangle(0, 0, 960, 544, RGBA(15, 25, 40, 255));
+
+                        // Draw success icon/checkmark effect
+                        vita2d_draw_rectangle(430, 140, 100, 100, RGBA(0, 200, 0, 100));
+
+                        // Draw title
+                        vita2d_pgf_draw_text(font, 480 - 150, 180, RGBA(0, 255, 0, 255), 1.8f, "Cleaning Completed!");
+
+                        // Draw simple cleanup number (back to basic style)
+                        char countText[64];
+                        snprintf(countText, sizeof(countText), "Cleanup #%d", cleanupCount);
+                        vita2d_pgf_draw_text(font, 480 - 80, 220, RGBA(255, 255, 100, 255), 1.1f, countText);
+
+                        // Draw statistics
+                        vita2d_pgf_draw_text(font, 480 - 100, 260, RGBA(255, 255, 255, 255), 1.2f, spaceText);
+
+                        char filesText[64];
+                        snprintf(filesText, sizeof(filesText), "Files Deleted: %d", filesDeleted);
+                        vita2d_pgf_draw_text(font, 480 - 100, 300, RGBA(255, 255, 255, 255), 1.2f, filesText);
+
+                        // Draw decorative line
+                        vita2d_draw_rectangle(330, 240, 300, 2, RGBA(0, 200, 0, 255));
+
+                        vita2d_end_drawing();
+                        vita2d_swap_buffers();
+                        sceKernelDelayThread(3 * 1000 * 1000); // 3 seconds
+                    }
+
+                    // Free preview list
+                    if (preview.fileList) {
+                        freeFileList(preview.fileList);
+                        preview.fileList = NULL;
+                    }
+
+                    sceKernelDelayThread(200 * 1000);
                 }
-                
-                // Free preview list
-                if (preview.fileList) {
-                    freeFileList(preview.fileList);
-                    preview.fileList = NULL;
-                }
-                
-                sceKernelDelayThread(200 * 1000);
             }
             if (pad.buttons & SCE_CTRL_CIRCLE) {
                 // Cancel preview
@@ -489,12 +748,54 @@ int main() {
                 sceKernelDelayThread(200 * 1000); // 200ms delay
             }
             if (pad.buttons & SCE_CTRL_CROSS) {
-                // Toggle option
-                menu.enabled[menu.selected] = !menu.enabled[menu.selected];
+                // Special handling for "All Categories" - if X is pressed and "All Categories" is selected, activate all
+                if (menu.selected == 8) {
+                    // Activate all cleaning options (0-6, skipping Exclusion Settings)
+                    for (int i = 0; i < 7; i++) {
+                        menu.enabled[i] = 1;
+                    }
+                } else {
+                    // Toggle option normally
+                    menu.enabled[menu.selected] = !menu.enabled[menu.selected];
+                }
+                sceKernelDelayThread(200 * 1000); // 200ms delay
+            }
+            if (pad.buttons & SCE_CTRL_SELECT) {
+                // Select all / deselect all functionality (EXCEPT "Exclusion Settings" which is always left alone)
+                int allEnabled = 1;
+                for (int i = 0; i < 7; i++) { // Only check first 7 options (exclude "Exclusion Settings")
+                    if (!menu.enabled[i]) {
+                        allEnabled = 0;
+                        break;
+                    }
+                }
+
+                // Set all options except "Exclusion Settings" to the opposite state
+                for (int i = 0; i < 7; i++) { // Only toggle first 7 options
+                    menu.enabled[i] = !allEnabled;
+                }
                 sceKernelDelayThread(200 * 1000); // 200ms delay
             }
             if (pad.buttons & SCE_CTRL_CIRCLE) {
-                // Start cleaning with selected options
+                // Show preview screen before cleaning
+                showPreview = 1;
+                preview.scrollOffset = 0;
+                preview.selectedFile = 0;
+
+                // Show loading message
+                vita2d_start_drawing();
+                vita2d_clear_screen();
+                vita2d_draw_rectangle(0, 0, 960, 544, RGBA(15, 25, 40, 255));
+                vita2d_pgf_draw_text(font, 480 - 100, 272, RGBA(255, 255, 100, 255), 1.3f, "Scanning files...");
+                vita2d_end_drawing();
+                vita2d_swap_buffers();
+
+                // Create and populate file list
+                preview.fileList = createFileList();
+                if (preview.fileList) {
+                    scanFilesForPreview(preview.fileList);
+                }
+
                 showMenu = 0;
                 sceKernelDelayThread(200 * 1000); // 200ms delay
             }
@@ -505,6 +806,11 @@ int main() {
             }
         } else {
             // Handle main menu
+            if (pad.buttons & SCE_CTRL_SQUARE) {
+                // Return to profile selection
+                showProfileSelect = 1;
+                sceKernelDelayThread(200 * 1000); // 200ms delay
+            }
             if (pad.buttons & SCE_CTRL_TRIANGLE) {
                 // Show options menu
                 showMenu = 1;
@@ -515,7 +821,7 @@ int main() {
                 showPreview = 1;
                 preview.scrollOffset = 0;
                 preview.selectedFile = 0;
-                
+
                 // Show loading message
                 vita2d_start_drawing();
                 vita2d_clear_screen();
@@ -523,13 +829,13 @@ int main() {
                 vita2d_pgf_draw_text(font, 480 - 100, 272, RGBA(255, 255, 100, 255), 1.3f, "Scanning files...");
                 vita2d_end_drawing();
                 vita2d_swap_buffers();
-                
+
                 // Create and populate file list
                 preview.fileList = createFileList();
                 if (preview.fileList) {
                     scanFilesForPreview(preview.fileList);
                 }
-                
+
                 sceKernelDelayThread(200 * 1000);
             }
 

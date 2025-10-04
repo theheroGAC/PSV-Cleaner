@@ -23,6 +23,10 @@ typedef struct {
 // Global counter for deleted files
 extern int g_deletedFilesCount;
 
+// Cleanup counter functionality
+int loadCleanupCounter();
+void saveCleanupCounter(int count);
+
 // Function declarations
 unsigned long long calculateTempSize();
 unsigned long long calculateTempSizeRecursive(const char *path);
