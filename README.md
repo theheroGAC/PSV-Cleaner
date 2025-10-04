@@ -1,9 +1,9 @@
 # PSV Cleaner
 
-![GitHub release (latest by date)](https://img.shields.io/github/v/release/TuoUsername/PSV-Cleaner)
-![GitHub license](https://img.shields.io/github/license/TuoUsername/PSV-Cleaner)
-![GitHub issues](https://img.shields.io/github/issues/TuoUsername/PSV-Cleaner)
-![GitHub stars](https://img.shields.io/github/stars/TuoUsername/PSV-Cleaner?style=social)
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/theheroGAC/PSV-Cleaner)
+![GitHub license](https://img.shields.io/github/license/theheroGAC/PSV-Cleaner)
+![GitHub issues](https://img.shields.io/github/issues/theheroGAC/PSV-Cleaner)
+![GitHub stars](https://img.shields.io/github/stars/theheroGAC/PSV-Cleaner?style=social)
 
 **PSV Cleaner** is a powerful and user-friendly temporary files cleaner designed specifically for the PlayStation Vita homebrew community. This tool helps you free up valuable storage space by safely removing temporary files, cache data, and system dumps that accumulate over time.
 
@@ -129,9 +129,42 @@
 
 ## Important Notes
 
-- Backup important data before first use (though it's safe, it's always good practice)  
-- Works best with regular use to maintain optimal performance  
-- Compatible with all major PS Vita homebrew applications  
+- Backup important data before first use (though it's safe, it's always good practice)
+- Works best with regular use to maintain optimal performance
+- Compatible with all major PS Vita homebrew applications
+
+---
+
+## Credits
+
+### Developers
+**Original Creator:** theheroGAC  
+**Development Team:** All contributors to the PlayStation Vita homebrew community
+
+### Special Thanks
+- **VitaSDK Developers** - For the incredible development toolkit and libraries that made this project possible
+  - The entire team behind VitaSDK and its documentation
+  - Open-source contributors to PS Vita homebrew development
+  - Community testers and feedback providers
+
+- **Homebrew Community** - For inspiring and supporting PS Vita development
+  - VitaShell, PKGi, RetroArch, and all homebrew app developers
+  - Plugin developers (reF00D, NoNpDrm, VitaGrafix, etc.)
+  - The amazing PS Vita homebrew ecosystem
+
+### Acknowledgments
+This project wouldn't have been possible without the dedicated work of countless developers who contributed to PS Vita homebrew tools, libraries, and knowledge sharing. A special acknowledgment goes to all the PS Vita enthusiasts who keep this platform alive and thriving.
+
+---
+
+## License
+
+This software is freely distributable for all purposes and uses, provided that:
+- All credits to the original creator **theheroGAC** must be preserved
+- The acknowledgment of VitaSDK developers and the homebrew community is maintained
+- No modifications that remove or alter the credits are permitted
+
+**Freedom with Responsibility** - Use, share, and enjoy PSV Cleaner while respecting the effort and contributions that made it possible!
 
 ---
 
@@ -140,4 +173,3 @@
 This tool is developed for the PlayStation Vita homebrew community and is completely free to use. No ads, no tracking, just a clean and efficient way to maintain your PS Vita.
 
 **Download now and give your PlayStation Vita the cleaning it deserves!**
-
