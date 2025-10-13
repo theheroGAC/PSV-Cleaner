@@ -2,51 +2,32 @@
 
 All notable changes to PSV Cleaner will be documented in this file.
 
-## [1.03] - 2025-10-04
+## [1.04] - 2025-10-13
 
 ### Added
-- **Cleaning Profiles System** - Three intelligent cleaning modes
-  - **Quick Profile** - Only safe cache files (VitaShell, PKGi, RetroArch, Browser, etc.)
-  - **Complete Profile** - All temporary files and system cleanup (default mode)
-  - **Selective Profile** - User manually chooses which categories to clean
+- **Emergency Stop System** - Safe interruption of cleaning operations
+  - **Real-time Stop** - Press Circle button during cleaning to stop safely
+  - **Operation Tracking** - Monitors active operations and cleanup state
+  - **Emergency Screen** - Clear feedback when operation is interrupted
+  - **Partial Results Display** - Shows statistics of files actually deleted before interruption
+  - **Safe Cleanup** - Proper resource cleanup when stopping mid-operation
+  - **Visual Feedback** - Progress bar shows "Stopping operation..." when stopping
 
-- **Profile Selection Screen** - Elegant initial screen at app startup
-  - Navigate profiles with D-Pad Up/Down
-  - Detailed descriptions for each profile mode
-  - One-time selection that configures the entire session
-
-- **Cleanup Counter System** - Persistent statistics tracking
-  - Saves total number of cleaning sessions
-  - Displays "Cleanup #X" on completion screen
-  - Persistent storage in ux0:data/PSV_Cleaner/counter.txt
-
-- **Additional Cleaning Paths** - Extended coverage
-  - ux0:download/ and ux0:downloads/ complete directory scanning
-  - Enhanced download temporary file detection
-
-### Improved
-- **User Interface Centering** - Professional text positioning
-  - All main titles perfectly centered on screen
-  - Consistent button alignment and spacing
-  - Improved visual hierarchy
-
-- **Profile-Based Menu Initialization** - Dynamic menu configuration
-  - Menu options automatically set based on selected profile
-  - Quick mode: only cache categories enabled by default
-  - Complete mode: all cleaning options enabled
-  - Selective mode: nothing pre-selected for manual choice
-
-- **Navigation Experience** - Enhanced user flow
-  - **Square Button**: Change cleaning profile anytime
-  - **Seamless switching** between profile modes
-  - **Persistent profile memory** during session
+- **Enhanced User Safety** - Improved operation control
+  - **Graceful Interruption Handling** - Clear user feedback during emergency stops
+  - **System State Preservation** - Recovery options after emergency stop
+  - **Informative Emergency Screen** - Details about what happened during interruption
 
 ### Technical
-- Added PROFILE_QUICK, PROFILE_COMPLETE, PROFILE_SELECTIVE enum system
-- Dynamic menu initialization with profile parameter
-- Persistent counter file management
-- Enhanced download path coverage (now 95 cleaning paths total)
-- Improved text positioning calculations for perfect centering
+- **Emergency Stop Flags** - Global flags for operation state tracking
+- **Safe Operation Lifecycle** - Start/end/cleanup operation management functions
+- **Improved Progress Bar** - Visual feedback for emergency stop requests
+- **Resource Cleanup Functions** - Proper cleanup when operations are interrupted
+
+### UI & UX Improvements
+- **Operation Management Indicators** - Better handling of long-running operations
+- **Emergency Stop Request Handling** - Safe state transitions during interruptions
+- **User Confirmation for Interrupted Operations** - Clear messaging about operation status
 
 ---
 

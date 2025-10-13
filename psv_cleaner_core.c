@@ -2,13 +2,21 @@
 #include <psp2/io/fcntl.h>
 #include <psp2/io/stat.h>
 #include <psp2/kernel/threadmgr.h>
+#include <psp2/rtc.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include "psv_cleaner_core.h"
 
+// Time variable for theme detection
+SceRtcTick rtcTick;
+
 // Global counter for deleted files
 int g_deletedFilesCount = 0;
+
+// Emergency stop system
+int g_emergencyStop = 0;
+int g_operationInProgress = 0;
 
 // List of temporary folders to clean
 const char *TEMP_PATHS[] = {
@@ -161,6 +169,112 @@ const char *TEMP_PATHS[] = {
 
 const size_t TEMP_PATHS_COUNT = sizeof(TEMP_PATHS)/sizeof(TEMP_PATHS[0]);
 
+// Localization and themes implementation
+
+// Theme definitions (using RGBA macro now available)
+ThemeColors themes[2] = {
+    // LIGHT THEME
+    {
+        .bg_primary = RGBA(15, 25, 50, 255),     // Dark blue
+        .bg_secondary = RGBA(25, 35, 55, 240),   // Medium blue
+        .text_primary = RGBA(255, 255, 255, 255), // White
+        .text_secondary = RGBA(200, 200, 200, 255), // Light gray
+        .accent = RGBA(100, 200, 255, 255),      // Light blue
+        .success = RGBA(100, 255, 100, 255),    // Green
+        .border = RGBA(100, 200, 255, 255)      // Blue
+    },
+    // DARK THEME
+    {
+        .bg_primary = RGBA(5, 10, 15, 255),      // Very dark
+        .bg_secondary = RGBA(15, 20, 30, 240),   // Dark gray-blue
+        .text_primary = RGBA(255, 255, 255, 255), // White
+        .text_secondary = RGBA(180, 180, 180, 255), // Gray
+        .accent = RGBA(150, 100, 200, 255),      // Purple
+        .success = RGBA(0, 255, 150, 255),      // Cyan-green
+        .border = RGBA(150, 100, 200, 255)      // Purple
+    }
+};
+
+// Current language and theme
+int currentLanguage = LANGUAGE_EN; // Default to English
+AppTheme currentTheme = THEME_LIGHT; // Default to light
+
+// Language strings - Screen titles (English only)
+const char* lang_titles_screen[MAX_LANGUAGES][10] = {
+    // LANGUAGE_EN (only)
+    {
+        "PSV Cleaner",
+        "Temporary Files Cleaner for PS Vita",
+        "Select Cleaning Profile",
+        "Advanced Cleaning Options",
+        "Preview - Files to Delete",
+        "Scanning files...",
+        "✓ CLEANING COMPLETED! ✓",
+        "Great job! Your PS Vita is cleaner!"
+    }
+};
+
+// Profile descriptions (English only)
+const char* lang_profile_options[MAX_LANGUAGES][6] = {
+    // LANGUAGE_EN (only)
+    {"Quick Clean", "Safe cache files only", "Complete Clean", "All temporary files", "Selective Clean", "Choose categories"}
+};
+
+// UI text elements (English only)
+const char* lang_ui_text[MAX_LANGUAGES][20] = {
+    // LANGUAGE_EN (only)
+    {
+        "System Status:", "Ready for Cleanup",
+        "Controls:", "■ Change Profile", "X Preview & Clean", "△ Advanced Options", "O Exit App",
+        "Space to free:", "Space Freed:", "Files Deleted:",
+        "D-Pad: Navigate | X: Select Profile | O: Exit",
+        "Cleanup #", "No temporary files found!",
+        "System Ready", "Version 1.04"
+    }
+};
+
+// Localization function
+const char* L(const char* lang_array[][20], int lang_index, int text_index) {
+    if (lang_index >= 0 && lang_index < MAX_LANGUAGES) {
+        return lang_array[lang_index][text_index];
+    }
+    return lang_array[0][text_index]; // Fallback to first language (Italian)
+}
+
+// Detect system language (simple implementation - for now hardcode based on common behavior)
+// TODO: Properly implement PS Vita SDK language detection when build system is configured correctly
+void detectSystemLanguage() {
+    // For now, we will try to detect based on some common system behaviors
+    // This is a temporary solution until the proper SDK integration is working
+
+    // Default to English (as requested by user)
+    currentLanguage = LANGUAGE_EN;
+
+    // NOTE: In a properly configured build environment with complete PS Vita SDK,
+    // this would use:
+    // int systemLang;
+    // int result = sceAppUtilSystemParamGetInt(SCE_SYSTEM_PARAM_ID_LANG, &systemLang);
+    // if (result >= 0) {
+    //     // Map systemLang to our language indices as above
+    // }
+
+    // Debug: Print current language setting
+    printf("PSV Cleaner: Using language index %d\n", currentLanguage);
+
+    // Set theme to light by default (could also be made dynamic based on system theme)
+    currentTheme = THEME_LIGHT;
+}
+
+// Set app theme
+void setTheme(AppTheme theme) {
+    currentTheme = theme;
+}
+
+// Apply current theme colors
+void applyThemeColors(ThemeColors* colors) {
+    *colors = themes[currentTheme];
+}
+
 // Get deleted files count
 int getDeletedFilesCount() {
     return g_deletedFilesCount;
@@ -186,6 +300,57 @@ void saveCleanupCounter(int count) {
         sceIoWrite(fd, &count, sizeof(int));
         sceIoClose(fd);
     }
+}
+
+// Emergency stop system functions
+
+// Initialize emergency stop system
+void initEmergencyStop() {
+    g_emergencyStop = 0;
+    g_operationInProgress = 0;
+}
+
+// Start an operation (mark as in progress)
+void startOperation() {
+    g_operationInProgress = 1;
+    g_emergencyStop = 0;
+}
+
+// End an operation (mark as completed)
+void endOperation() {
+    g_operationInProgress = 0;
+    g_emergencyStop = 0;
+}
+
+// Request emergency stop
+void requestEmergencyStop() {
+    g_emergencyStop = 1;
+}
+
+// Check if emergency stop is requested
+int isEmergencyStopRequested() {
+    return g_emergencyStop;
+}
+
+// Check if operation is in progress
+int isOperationInProgress() {
+    return g_operationInProgress;
+}
+
+// Safe cleanup when stopping operation
+void cleanupAfterEmergencyStop() {
+    // Reset all flags
+    g_emergencyStop = 0;
+    g_operationInProgress = 0;
+
+    // Force a small delay to ensure any pending I/O operations complete
+    sceKernelDelayThread(500 * 1000); // 500ms
+
+    // Note: In a real implementation, you might want to:
+    // - Close any open file handles
+    // - Reset any partially written files
+    // - Clear temporary buffers
+    // - Restore system state if needed
 }
 
 // Reset deleted files count

@@ -32,7 +32,11 @@ void drawProgressBar(vita2d_pgf *font, int percent) {
     vita2d_pgf_draw_text(font, 480 - 100, 100, RGBA(255, 255, 255, 255), 1.6f, "PSV Cleaner");
     
     // Draw "Cleaning in progress..." text above the bar
-    vita2d_pgf_draw_text(font, 480 - 150, y - 60, RGBA(255, 255, 100, 255), 1.2f, "Cleaning in progress...");
+    if (isEmergencyStopRequested()) {
+        vita2d_pgf_draw_text(font, 480 - 140, y - 60, RGBA(255, 100, 100, 255), 1.2f, "Stopping operation...");
+    } else {
+        vita2d_pgf_draw_text(font, 480 - 150, y - 60, RGBA(255, 255, 100, 255), 1.2f, "Cleaning in progress...");
+    }
 
     // Draw progress bar background (optimized for GPU)
     vita2d_draw_rectangle(x, y, barWidth, barHeight, RGBA(40, 40, 40, 255));
@@ -55,6 +59,22 @@ void drawProgressBar(vita2d_pgf *font, int percent) {
         vita2d_pgf_draw_text(font, 480 - 100, y + 60, RGBA(200, 200, 200, 255), 1.0f, "Deleting temporary files...");
     } else {
         vita2d_pgf_draw_text(font, 480 - 80, y + 60, RGBA(200, 200, 200, 255), 1.0f, "Finalizing cleanup...");
+    }
+
+    // Draw control instructions during cleaning
+    vita2d_draw_rectangle(0, 500, 960, 44, RGBA(15, 25, 40, 220));
+
+    // Emergency stop instruction (highlighted)
+    if (isEmergencyStopRequested()) {
+        vita2d_pgf_draw_text(font, 30, 525, RGBA(255, 100, 100, 255), 0.9f, "EMERGENCY STOP REQUESTED - Please wait...");
+    } else {
+        // Show emergency stop control
+        vita2d_draw_rectangle(30, 510, 25, 25, RGBA(255, 100, 100, 200));
+        vita2d_pgf_draw_text(font, 35, 528, RGBA(255, 255, 255, 255), 1.0f, "O");
+        vita2d_pgf_draw_text(font, 65, 528, RGBA(255, 255, 255, 255), 0.9f, "Emergency Stop");
+
+        // Add spacing and show instruction text
+        vita2d_pgf_draw_text(font, 220, 528, RGBA(200, 200, 200, 255), 0.8f, "Press O during cleaning to stop safely");
     }
 
     // Draw decorative borders
@@ -183,7 +203,7 @@ void drawOptionsMenu(vita2d_pgf *font, MenuOptions *menu) {
     // Draw title bar
     vita2d_draw_rectangle(105, 65, 750, 50, RGBA(0, 100, 180, 200));
     vita2d_draw_rectangle(105, 65, 750, 3, RGBA(0, 200, 255, 255)); // Top accent
-    vita2d_pgf_draw_text(font, 480 - 120, 95, RGBA(255, 255, 255, 255), 1.8f, "Advanced Cleaning Options");
+    vita2d_pgf_draw_text(font, 480 - 165, 95, RGBA(255, 255, 255, 255), 1.8f, "Advanced Cleaning Options");
     
     // Draw subtitle
     vita2d_pgf_draw_text(font, 480 - 180, 135, RGBA(200, 200, 200, 255), 0.9f, "Select which categories to clean (X to toggle)");
@@ -260,7 +280,7 @@ void drawOptionsMenu(vita2d_pgf *font, MenuOptions *menu) {
     // X button
     vita2d_draw_rectangle(265, instrY - 10, 22, 22, RGBA(80, 120, 180, 200));
     vita2d_pgf_draw_text(font, 270, instrY + 3, RGBA(255, 255, 255, 255), 0.8f, "X");
-    vita2d_pgf_draw_text(font, 295, instrY + 3, RGBA(220, 220, 220, 255), 0.9f, "Toggle Option");
+    vita2d_pgf_draw_text(font, 295, instrY + 3, RGBA(220, 220, 220, 255), 0.9f, L(lang_ui_text, currentLanguage, 4));
 
     // Select button (hidden as requested)
     // vita2d_draw_rectangle(525, instrY - 10, 22, 22, RGBA(80, 120, 180, 200));
@@ -270,12 +290,12 @@ void drawOptionsMenu(vita2d_pgf *font, MenuOptions *menu) {
     // O button
     vita2d_draw_rectangle(445, instrY - 10, 22, 22, RGBA(80, 120, 180, 200));
     vita2d_pgf_draw_text(font, 450, instrY + 3, RGBA(255, 255, 255, 255), 0.8f, "O");
-    vita2d_pgf_draw_text(font, 475, instrY + 3, RGBA(220, 220, 220, 255), 0.9f, "Start Cleaning");
+    vita2d_pgf_draw_text(font, 475, instrY + 3, RGBA(220, 220, 220, 255), 0.9f, L(lang_ui_text, currentLanguage, 4));
     
     // Triangle button
     vita2d_draw_rectangle(645, instrY - 10, 22, 22, RGBA(80, 120, 180, 200));
     vita2d_pgf_draw_text(font, 649, instrY + 3, RGBA(255, 255, 255, 255), 0.8f, "△");
-    vita2d_pgf_draw_text(font, 675, instrY + 3, RGBA(220, 220, 220, 255), 0.9f, "Back to Menu");
+    vita2d_pgf_draw_text(font, 675, instrY + 3, RGBA(220, 220, 220, 255), 0.9f, L(lang_ui_text, currentLanguage, 5));
 }
 
 // Draw preview screen
@@ -283,8 +303,8 @@ void drawPreviewScreen(vita2d_pgf *font, PreviewState *preview) {
     // Draw background
     vita2d_draw_rectangle(0, 0, 960, 544, RGBA(15, 25, 40, 255));
     
-    // Draw title - centered
-    vita2d_pgf_draw_text(font, 480 - 110, 40, RGBA(255, 255, 255, 255), 1.8f, "Preview - Files to Delete");
+    // Draw title - properly centered
+    vita2d_pgf_draw_text(font, 480 - 95, 40, RGBA(255, 255, 255, 255), 1.8f, "Preview - Files to Delete");
     
     if (!preview->fileList || preview->fileList->count == 0) {
         // No files found
@@ -403,6 +423,12 @@ int main() {
     }
     showSplash(splash);
 
+    // Initialize emergency stop system
+    initEmergencyStop();
+
+    // Detect system language automatically
+    detectSystemLanguage();
+
     // Calculate initial freeable space immediately after splash
     unsigned long long spaceBefore = calculateTempSize();
     char freeText[128];
@@ -458,17 +484,17 @@ int main() {
         // Draw simple background (GPU friendly)
         vita2d_draw_rectangle(0, 0, 960, 544, RGBA(20, 30, 50, 255));
 
-        // Draw main title - centered
-        vita2d_pgf_draw_text(font, 480 - 90, 82, RGBA(0, 0, 0, 150), 2.2f, "PSV Cleaner"); // Shadow
-        vita2d_pgf_draw_text(font, 480 - 92, 80, RGBA(100, 200, 255, 255), 2.2f, "PSV Cleaner"); // Main text with blue tint
+        // Draw main title - adjusted more to the left
+        vita2d_pgf_draw_text(font, 480 - 80, 82, RGBA(0, 0, 0, 150), 2.2f, "PSV Cleaner"); // Shadow
+        vita2d_pgf_draw_text(font, 480 - 82, 80, RGBA(100, 200, 255, 255), 2.2f, "PSV Cleaner"); // Main text with blue tint
 
-        // Draw subtitle - centered
-        vita2d_pgf_draw_text(font, 480 - 115, 120, RGBA(200, 200, 200, 255), 1.1f, "Temporary Files Cleaner for PS Vita");
+        // Draw subtitle - adjusted more to the left
+        vita2d_pgf_draw_text(font, 480 - 95, 115, RGBA(200, 200, 200, 255), 1.1f, "Temporary Files Cleaner for PS Vita");
 
         if (showProfileSelect) {
             // Draw profile selection screen
-            // Draw title for profile selection
-            vita2d_pgf_draw_text(font, 480 - 160, 160, RGBA(255, 255, 255, 255), 1.6f, "Select Cleaning Profile");
+            // Draw title for profile selection - adjusted more to the left
+            vita2d_pgf_draw_text(font, 480 - 95, 160, RGBA(255, 255, 255, 255), 1.6f, "Select Cleaning Profile");
 
             // Profile options
             const char* profiles[3] = {
@@ -526,42 +552,42 @@ int main() {
             vita2d_draw_rectangle(230, 220, 30, 25, RGBA(0, 180, 255, 200));
             
             // Draw status info instead of initial space calculation
-            vita2d_pgf_draw_text(font, 290, 220, RGBA(100, 255, 255, 255), 1.0f, "System Status:");
-            vita2d_pgf_draw_text(font, 290, 250, RGBA(255, 255, 100, 255), 1.4f, "Ready for Cleanup");
+            vita2d_pgf_draw_text(font, 290, 220, RGBA(100, 255, 255, 255), 1.0f, L(lang_ui_text, currentLanguage, 0));
+            vita2d_pgf_draw_text(font, 290, 250, RGBA(255, 255, 100, 255), 1.4f, L(lang_ui_text, currentLanguage, 1));
 
             // Draw separator line
             vita2d_draw_rectangle(220, 280, 520, 2, RGBA(0, 150, 255, 150));
 
 // Draw controls section with icons
-vita2d_pgf_draw_text(font, 220, 310, RGBA(100, 200, 255, 255), 1.2f, "Controls:");
+vita2d_pgf_draw_text(font, 220, 310, RGBA(100, 200, 255, 255), 1.2f, L(lang_ui_text, currentLanguage, 2));
 
 // Draw control buttons with background - centered symbols
 // Square button
 vita2d_draw_rectangle(240, 330, 25, 25, RGBA(100, 150, 255, 200));
 vita2d_pgf_draw_text(font, 243, 348, RGBA(255, 255, 255, 255), 1.0f, "■");
-vita2d_pgf_draw_text(font, 285, 348, RGBA(255, 255, 255, 255), 0.9f, "Change Profile");
+vita2d_pgf_draw_text(font, 285, 348, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_text, currentLanguage, 3));
 
 // X button
 vita2d_draw_rectangle(240, 350, 25, 25, RGBA(100, 150, 255, 200));
 vita2d_pgf_draw_text(font, 245, 368, RGBA(255, 255, 255, 255), 1.0f, "X");
-vita2d_pgf_draw_text(font, 285, 368, RGBA(255, 255, 255, 255), 0.9f, "Preview & Clean");
+vita2d_pgf_draw_text(font, 285, 368, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_text, currentLanguage, 4));
 
 // Triangle button
 vita2d_draw_rectangle(240, 370, 25, 25, RGBA(100, 150, 255, 200));
 vita2d_pgf_draw_text(font, 245, 388, RGBA(255, 255, 255, 255), 1.0f, "△");
-vita2d_pgf_draw_text(font, 285, 388, RGBA(255, 255, 255, 255), 0.9f, "Advanced Options");
+vita2d_pgf_draw_text(font, 285, 388, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_text, currentLanguage, 5));
 
 // Circle button
 vita2d_draw_rectangle(240, 390, 25, 25, RGBA(100, 150, 255, 200));
 vita2d_pgf_draw_text(font, 245, 408, RGBA(255, 255, 255, 255), 1.0f, "O");
-vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, "Exit App");
+vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_text, currentLanguage, 6));
             
             // Draw version and footer info
             vita2d_draw_rectangle(0, 470, 960, 74, RGBA(15, 25, 40, 200));
             vita2d_draw_rectangle(0, 470, 960, 2, RGBA(0, 150, 255, 255));
             
             // Version info
-            vita2d_pgf_draw_text(font, 30, 495, RGBA(150, 200, 255, 255), 0.9f, "Version 1.03");
+            vita2d_pgf_draw_text(font, 30, 495, RGBA(150, 200, 255, 255), 0.9f, "Version 1.04");
             
             // Quick stats in footer
             char statsText[128];
@@ -633,8 +659,12 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, "Exit App")
                     // Start cleaning
                     showPreview = 0;
 
-                    // Start cleaning with progress bar
-                    for (int pct = 0; pct <= 100; pct++) {
+                    // Initialize and start cleaning operation with emergency stop support
+                    startOperation();
+
+                    // Start cleaning with progress bar and emergency stop support
+                    int cleaningInterrupted = 0;
+                    for (int pct = 0; pct <= 100 && !isEmergencyStopRequested(); pct++) {
                         vita2d_start_drawing();
                         vita2d_clear_screen();
                         drawProgressBar(font, pct);
@@ -642,12 +672,85 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, "Exit App")
                         vita2d_swap_buffers();
                         sceKernelDelayThread(50 * 1000);
 
-                        // Check if user presses Circle to exit during cleaning
+                        // Check if user presses Circle to request emergency stop during cleaning
                         sceCtrlPeekBufferPositive(0, &pad, 1);
                         if (pad.buttons & SCE_CTRL_CIRCLE) {
-                            running = 0;
+                            requestEmergencyStop();
+                            cleaningInterrupted = 1;
                             break;
                         }
+                    }
+
+                    // End operation
+                    endOperation();
+
+                    // Handle emergency stop cleanup if needed
+                    if (cleaningInterrupted) {
+                        cleanupAfterEmergencyStop();
+
+                        // Show partial completion screen for emergency stop
+                        // Use preview size as more accurate measurement for space freed (partial)
+                        unsigned long long spaceFreedFromPreview = (preview.fileList ? preview.fileList->totalSize : 0);
+
+                        // Perform partial cleaning results calculation
+                        cleanTemporaryFiles();
+
+                        // Save deleted file count for display (this includes any additional files deleted)
+                        int filesDeleted = getDeletedFilesCount();
+
+                        // Recalculate space after partial cleaning
+                        spaceBefore = calculateTempSize();
+
+                        // Format space freed text using preview totals (may be incomplete due to interruption)
+                        char spaceText[128];
+                        if (spaceFreedFromPreview < (1024 * 1024))
+                            snprintf(spaceText, sizeof(spaceText), "Space Freed: %llu KB", spaceFreedFromPreview / 1024);
+                        else if (spaceFreedFromPreview < (1024ULL * 1024 * 1024))
+                            snprintf(spaceText, sizeof(spaceText), "Space Freed: %.2f MB", spaceFreedFromPreview / (1024.0 * 1024));
+                        else
+                            snprintf(spaceText, sizeof(spaceText), "Space Freed: %.2f GB", spaceFreedFromPreview / (1024.0 * 1024 * 1024));
+
+                        // Show emergency stop with partial results
+                        vita2d_start_drawing();
+                        vita2d_clear_screen();
+                        vita2d_draw_rectangle(0, 0, 960, 544, RGBA(40, 40, 80, 255)); // Blue-gray background
+
+                        // Emergency stop title
+                        vita2d_pgf_draw_text(font, 480 - 130, 120, RGBA(255, 255, 255, 255), 2.0f, "OPERATION INTERRUPTED");
+
+                        // Explanation - different for emergency stop
+                        vita2d_pgf_draw_text(font, 480 - 180, 180, RGBA(255, 200, 200, 255), 1.2f, "Cleaning was safely interrupted by user request");
+                        vita2d_pgf_draw_text(font, 480 - 160, 210, RGBA(255, 200, 200, 255), 0.9f, "Some temporary files may have been deleted");
+
+                        // Statistics from partial cleanup
+                        // Space freed - show partial results
+                        vita2d_draw_rectangle(360, 260, 240, 40, RGBA(30, 80, 120, 180));
+                        vita2d_draw_rectangle(360, 260, 240, 3, RGBA(100, 200, 255, 255));
+                        vita2d_draw_rectangle(360, 297, 240, 3, RGBA(100, 200, 255, 255));
+                        vita2d_pgf_draw_text(font, 480 - 105, 285, RGBA(255, 255, 255, 255), 1.2f, spaceText);
+
+                        // Files deleted - show count from partial cleanup
+                        vita2d_draw_rectangle(360, 310, 240, 40, RGBA(30, 80, 120, 180));
+                        vita2d_draw_rectangle(360, 310, 240, 3, RGBA(100, 200, 255, 255));
+                        vita2d_draw_rectangle(360, 347, 240, 3, RGBA(100, 200, 255, 255));
+                        char filesText[64];
+                        snprintf(filesText, sizeof(filesText), "Files Deleted: %d", filesDeleted);
+                        vita2d_pgf_draw_text(font, 480 - 105, 335, RGBA(255, 255, 255, 255), 1.2f, filesText);
+
+                        // Instructions - return to main menu
+                        vita2d_pgf_draw_text(font, 480 - 120, 400, RGBA(200, 200, 200, 255), 0.9f, "Returning to main menu...");
+
+                        vita2d_end_drawing();
+                        vita2d_swap_buffers();
+                        sceKernelDelayThread(4 * 1000 * 1000); // 4 seconds to show results
+
+                        // Free preview list and return to main menu
+                        if (preview.fileList) {
+                            freeFileList(preview.fileList);
+                            preview.fileList = NULL;
+                        }
+                        sceKernelDelayThread(200 * 1000);
+                        continue; // Return to main menu
                     }
 
                     if (running) {
@@ -688,31 +791,46 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, "Exit App")
                         // Show notification
                         showNotification("PSV Cleaner", "Cleaning completed successfully!");
 
-                        // Draw success screen with statistics
+                        // Draw enhanced success screen with celebratory styling (fixed layout)
                         vita2d_start_drawing();
                         vita2d_clear_screen();
-                        vita2d_draw_rectangle(0, 0, 960, 544, RGBA(15, 25, 40, 255));
 
-                        // Draw success icon/checkmark effect
-                        vita2d_draw_rectangle(430, 140, 100, 100, RGBA(0, 200, 0, 100));
+                        // Clean solid green background (no gradient issues)
+                        vita2d_draw_rectangle(0, 0, 960, 544, RGBA(15, 40, 25, 255));
 
-                        // Draw title
-                        vita2d_pgf_draw_text(font, 480 - 150, 180, RGBA(0, 255, 0, 255), 1.8f, "Cleaning Completed!");
+                        // Simple clean circle checkmark (no decorations that cause artifacts)
 
-                        // Draw simple cleanup number (back to basic style)
+                        // Congratulatory title - clean and centered
+                        vita2d_pgf_draw_text(font, 480 - 155, 78, RGBA(0, 0, 0, 200), 1.9f, "CLEANING COMPLETED!"); // Shadow
+                        vita2d_pgf_draw_text(font, 480 - 157, 75, RGBA(100, 255, 100, 255), 1.9f, "CLEANING COMPLETED!"); // Main
+
+                        // Enthusiastic subtitle - centered
+                        vita2d_pgf_draw_text(font, 480 - 130, 250, RGBA(255, 255, 150, 255), 1.1f, "Great job! Your PS Vita is cleaner!");
+
+                        // Cleanup counter - centered box and text
+                        vita2d_draw_rectangle(430, 270, 100, 25, RGBA(50, 100, 50, 200));
+                        vita2d_draw_rectangle(430, 270, 100, 2, RGBA(0, 255, 100, 255));
                         char countText[64];
                         snprintf(countText, sizeof(countText), "Cleanup #%d", cleanupCount);
-                        vita2d_pgf_draw_text(font, 480 - 80, 220, RGBA(255, 255, 100, 255), 1.1f, countText);
+                        vita2d_pgf_draw_text(font, 480 - 45, 290, RGBA(255, 255, 200, 255), 1.0f, countText);
 
-                        // Draw statistics
-                        vita2d_pgf_draw_text(font, 480 - 100, 260, RGBA(255, 255, 255, 255), 1.2f, spaceText);
+                        // Statistics panels with improved spacing and styling
+                        // Space freed - centered panels and text
+                        vita2d_draw_rectangle(360, 320, 240, 40, RGBA(30, 80, 120, 180));
+                        vita2d_draw_rectangle(360, 320, 240, 3, RGBA(100, 200, 255, 255)); // Thicker accent line
+                        vita2d_draw_rectangle(360, 357, 240, 3, RGBA(100, 200, 255, 255)); // Bottom accent
+                        vita2d_pgf_draw_text(font, 480 - 105, 345, RGBA(255, 255, 255, 255), 1.1f, spaceText);
 
+                        // Files deleted - centered
+                        vita2d_draw_rectangle(360, 370, 240, 40, RGBA(30, 80, 120, 180));
+                        vita2d_draw_rectangle(360, 370, 240, 3, RGBA(100, 200, 255, 255)); // Thicker accent line
+                        vita2d_draw_rectangle(360, 407, 240, 3, RGBA(100, 200, 255, 255)); // Bottom accent
                         char filesText[64];
                         snprintf(filesText, sizeof(filesText), "Files Deleted: %d", filesDeleted);
-                        vita2d_pgf_draw_text(font, 480 - 100, 300, RGBA(255, 255, 255, 255), 1.2f, filesText);
+                        vita2d_pgf_draw_text(font, 480 - 105, 395, RGBA(255, 255, 255, 255), 1.1f, filesText);
 
-                        // Draw decorative line
-                        vita2d_draw_rectangle(330, 240, 300, 2, RGBA(0, 200, 0, 255));
+                        // Motivational bottom message - centered
+                        vita2d_pgf_draw_text(font, 480 - 100, 460, RGBA(200, 255, 200, 255), 0.9f, "Keep your PS Vita clean and healthy!");
 
                         vita2d_end_drawing();
                         vita2d_swap_buffers();
