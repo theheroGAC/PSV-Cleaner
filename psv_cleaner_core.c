@@ -18,6 +18,26 @@ int g_deletedFilesCount = 0;
 int g_emergencyStop = 0;
 int g_operationInProgress = 0;
 
+// Intelligent cache system for fast scanning
+#define CACHE_FILE_PATH "ux0:data/PSV_Cleaner/scan_cache.bin"
+#define CACHE_VERSION 1
+#define CACHE_EXPIRY_HOURS 24  // Cache expires after 24 hours
+#define MAX_CACHE_ENTRIES 100  // Maximum number of cache entries
+
+typedef struct {
+    char path[256];
+    SceDateTime lastModified;
+    unsigned long long totalSize;
+    int fileCount;
+    int isValid;
+} CacheEntry;
+
+typedef struct {
+    int version;
+    SceDateTime created;
+    CacheEntry entries[MAX_CACHE_ENTRIES];
+} ScanCache;
+
 // List of temporary folders to clean
 const char *TEMP_PATHS[] = {
     // System temporary folders
@@ -229,7 +249,7 @@ const char* lang_ui_text[MAX_LANGUAGES][20] = {
         "Space to free:", "Space Freed:", "Files Deleted:",
         "D-Pad: Navigate | X: Select Profile | O: Exit",
         "Cleanup #", "No temporary files found!",
-        "System Ready", "Version 1.04"
+        "System Ready", "Version 1.05"
     }
 };
 
@@ -345,17 +365,120 @@ void cleanupAfterEmergencyStop() {
 
     // Force a small delay to ensure any pending I/O operations complete
     sceKernelDelayThread(500 * 1000); // 500ms
-
-    // Note: In a real implementation, you might want to:
-    // - Close any open file handles
-    // - Reset any partially written files
-    // - Clear temporary buffers
-    // - Restore system state if needed
 }
 
 // Reset deleted files count
 void resetDeletedFilesCount() {
     g_deletedFilesCount = 0;
+}
+
+// Intelligent cache functions for fast scanning
+
+// Get current time
+void getCurrentTime(SceDateTime* dt) {
+    SceRtcTick tick;
+    sceRtcGetCurrentTick(&tick);
+    sceRtcSetTick(dt, &tick);
+}
+
+// Check if cache entry is expired
+int isCacheExpired(SceDateTime* cacheTime) {
+    SceDateTime now;
+    getCurrentTime(&now);
+
+    // Calculate time difference in hours using tick comparison
+    SceRtcTick cacheTicks, nowTicks, expiryTicks;
+    sceRtcGetTick(cacheTime, &cacheTicks);
+    sceRtcGetTick(&now, &nowTicks);
+
+    // Add expiry time to cache time
+    sceRtcTickAddHours(&expiryTicks, &cacheTicks, CACHE_EXPIRY_HOURS);
+
+    // Compare current time with expiry time
+    return sceRtcCompareTick(&nowTicks, &expiryTicks) >= 0;
+}
+
+// Load scan cache from file
+ScanCache* loadScanCache() {
+    ScanCache* cache = (ScanCache*)malloc(sizeof(ScanCache));
+    if (!cache) return NULL;
+
+    SceUID fd = sceIoOpen(CACHE_FILE_PATH, SCE_O_RDONLY, 0777);
+    if (fd < 0) {
+        free(cache);
+        return NULL;
+    }
+
+    int readSize = sceIoRead(fd, cache, sizeof(ScanCache));
+    sceIoClose(fd);
+
+    // Validate cache
+    if (readSize != sizeof(ScanCache) || cache->version != CACHE_VERSION || isCacheExpired(&cache->created)) {
+        free(cache);
+        return NULL;
+    }
+
+    return cache;
+}
+
+// Save scan cache to file
+void saveScanCache(ScanCache* cache) {
+    if (!cache) return;
+
+    // Ensure directory exists
+    sceIoMkdir("ux0:data/PSV_Cleaner", 0777);
+
+    SceUID fd = sceIoOpen(CACHE_FILE_PATH, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+    if (fd >= 0) {
+        sceIoWrite(fd, cache, sizeof(ScanCache));
+        sceIoClose(fd);
+    }
+}
+
+// Get directory modification time
+int getDirectoryModTime(const char* path, SceDateTime* modTime) {
+    SceIoStat stat;
+    if (sceIoGetstat(path, &stat) >= 0) {
+        *modTime = stat.st_mtime;
+        return 1;
+    }
+    return 0;
+}
+
+// Check if directory has changed since last cache
+int hasDirectoryChanged(const char* path, SceDateTime* cachedTime) {
+    SceDateTime currentTime;
+    if (!getDirectoryModTime(path, &currentTime)) {
+        return 1; // Directory doesn't exist or can't be accessed, consider it changed
+    }
+
+    SceRtcTick cachedTicks, currentTicks;
+    sceRtcGetTick(cachedTime, &cachedTicks);
+    sceRtcGetTick(&currentTime, &currentTicks);
+
+    // Compare ticks: if current > cached, directory has changed
+    return sceRtcCompareTick(&currentTicks, &cachedTicks) > 0;
+}
+
+// Create new cache entry for a path
+CacheEntry createCacheEntry(const char* path) {
+    CacheEntry entry;
+    memset(&entry, 0, sizeof(CacheEntry));
+    strncpy(entry.path, path, sizeof(entry.path) - 1);
+
+    if (getDirectoryModTime(path, &entry.lastModified)) {
+        entry.totalSize = calculateTempSizeRecursive(path);
+        entry.isValid = 1;
+    } else {
+        entry.isValid = 0;
+    }
+
+    return entry;
+}
+
+// Clear scan cache manually
+void clearScanCache() {
+    sceIoRemove(CACHE_FILE_PATH);
 }
 
 // Force delete dump files that might be locked by system
@@ -507,14 +630,52 @@ unsigned long long calculateTempSizeRecursive(const char *path) {
     return total;
 }
 
-// Calculate total size of temporary folders
+// Calculate total size of temporary folders with intelligent caching
 unsigned long long calculateTempSize() {
     unsigned long long total = 0;
-    for(size_t i=0;i<TEMP_PATHS_COUNT;i++){
-        // Continue with calculation (PS Vita handles suspension automatically)
-        unsigned long long pathSize = calculateTempSizeRecursive(TEMP_PATHS[i]);
+    ScanCache* cache = loadScanCache();
+    ScanCache* newCache = NULL;
+
+    if (!cache) {
+        // No valid cache, create new one
+        newCache = (ScanCache*)malloc(sizeof(ScanCache));
+        if (newCache) {
+            memset(newCache, 0, sizeof(ScanCache));
+            newCache->version = CACHE_VERSION;
+            getCurrentTime(&newCache->created);
+        }
+    }
+
+    for(size_t i = 0; i < TEMP_PATHS_COUNT; i++){
+        unsigned long long pathSize = 0;
+
+        if (cache && cache->entries[i].isValid && !hasDirectoryChanged(TEMP_PATHS[i], &cache->entries[i].lastModified)) {
+            // Use cached value
+            pathSize = cache->entries[i].totalSize;
+        } else {
+            // Calculate fresh value
+            pathSize = calculateTempSizeRecursive(TEMP_PATHS[i]);
+
+            // Update cache entry
+            if (newCache) {
+                newCache->entries[i] = createCacheEntry(TEMP_PATHS[i]);
+            }
+        }
+
         total += pathSize;
     }
+
+    // Save new cache if created
+    if (newCache) {
+        saveScanCache(newCache);
+        free(newCache);
+    }
+
+    // Free loaded cache
+    if (cache) {
+        free(cache);
+    }
+
     return total;
 }
 
@@ -522,24 +683,27 @@ unsigned long long calculateTempSize() {
 unsigned long long cleanTemporaryFiles() {
     // Reset counter before cleaning
     resetDeletedFilesCount();
-    
+
     unsigned long long before = calculateTempSize();
-    
+
     // First try to force delete locked dump files
     forceDeleteDumpFiles();
-    
+
     // Try aggressive dump cleanup
     aggressiveDumpCleanup();
-    
+
     for(size_t i=0;i<TEMP_PATHS_COUNT;i++){
         // Continue with cleaning (PS Vita handles suspension automatically)
         deleteRecursive(TEMP_PATHS[i]);
     }
-    
+
     // Try again to delete dump files after main cleaning
     forceDeleteDumpFiles();
     aggressiveDumpCleanup();
-    
+
+    // Clear cache after cleaning to ensure fresh scans next time
+    sceIoRemove(CACHE_FILE_PATH);
+
     unsigned long long after = calculateTempSize();
     return before - after;
 }

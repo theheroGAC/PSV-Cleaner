@@ -82,42 +82,7 @@ void drawProgressBar(vita2d_pgf *font, int percent) {
     vita2d_draw_rectangle(0, 542, 960, 2, RGBA(0, 200, 0, 255));
 }
 
-// Show splash screen
-void showSplash(vita2d_texture *tex) {
-    vita2d_start_drawing();
-    vita2d_clear_screen();
 
-    int x = (960 - vita2d_texture_get_width(tex)) / 2;
-    int y = (544 - vita2d_texture_get_height(tex)) / 2;
-
-    vita2d_draw_texture(tex, x, y);
-    vita2d_end_drawing();
-    vita2d_swap_buffers();
-    sceKernelDelayThread(3 * 1000 * 1000); // 3 seconds
-}
-
-// Play success sound (melody like CloneDVD)
-void playSuccessSound() {
-    // Create a pleasant success melody
-    // Melody: C-E-G-C-E-G-C (Do-Mi-Sol-Do-Mi-Sol-Do)
-    
-    // First phrase: C-E-G-C
-    sceKernelDelayThread(120 * 1000); // C
-    sceKernelDelayThread(120 * 1000); // E  
-    sceKernelDelayThread(120 * 1000); // G
-    sceKernelDelayThread(180 * 1000); // C (longer)
-    
-    // Pause between phrases
-    sceKernelDelayThread(80 * 1000);
-    
-    // Second phrase: E-G-C
-    sceKernelDelayThread(120 * 1000); // E
-    sceKernelDelayThread(120 * 1000); // G
-    sceKernelDelayThread(200 * 1000); // C (longest)
-    
-    // Final pause
-    sceKernelDelayThread(100 * 1000);
-}
 
 // Show system notification
 void showNotification(const char *title, const char *message) {
@@ -413,15 +378,7 @@ int main() {
 
     SceCtrlData pad;
 
-    // Load splash image
-    vita2d_texture *splash = vita2d_load_PNG_file("app0:resources/Reihen.png");
-    if (!splash) {
-        printf("Failed to load splash image!\n");
-        vita2d_free_pgf(font);
-        vita2d_fini();
-        return -1;
-    }
-    showSplash(splash);
+
 
     // Initialize emergency stop system
     initEmergencyStop();
@@ -429,7 +386,7 @@ int main() {
     // Detect system language automatically
     detectSystemLanguage();
 
-    // Calculate initial freeable space immediately after splash
+    // Calculate initial freeable space
     unsigned long long spaceBefore = calculateTempSize();
     char freeText[128];
     if (spaceBefore == 0) {
@@ -587,7 +544,7 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
             vita2d_draw_rectangle(0, 470, 960, 2, RGBA(0, 150, 255, 255));
             
             // Version info
-            vita2d_pgf_draw_text(font, 30, 495, RGBA(150, 200, 255, 255), 0.9f, "Version 1.04");
+            vita2d_pgf_draw_text(font, 30, 495, RGBA(150, 200, 255, 255), 0.9f, "Version 1.05");
             
             // Quick stats in footer
             char statsText[128];
@@ -785,9 +742,6 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
                         else
                             snprintf(spaceText, sizeof(spaceText), "Space Freed: %.2f GB", spaceFreedFromPreview / (1024.0 * 1024 * 1024));
 
-                        // Play success sound
-                        playSuccessSound();
-
                         // Show notification
                         showNotification("PSV Cleaner", "Cleaning completed successfully!");
 
@@ -969,8 +923,7 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
     if (preview.fileList) {
         freeFileList(preview.fileList);
     }
-    
-    vita2d_free_texture(splash);
+
     vita2d_free_pgf(font);
     vita2d_fini();
 
