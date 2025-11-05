@@ -2,6 +2,45 @@
 
 All notable changes to PSV Cleaner will be documented in this file.
 
+## [1.06] - 2025-11-05
+
+### Major Improvements
+
+#### Codebase Cleanup
+- **Removed ALL comments** - Completely comment-free codebase for cleaner, more professional code
+- **Streamlined structure** - Minimalist C code with zero unnecessary documentation
+
+#### Critical Bug Fixes
+- **Fixed VPK file deletion** - Now properly deletes `.vpk` files from `ux0:/` root directory
+- **Fixed UI button labels** - Corrected duplicate and inaccurate button descriptions in advanced options
+- **Fixed wildcard pattern handling** - VPK files now use proper directory scanning instead of broken wildcards
+
+#### Enhanced User Experience
+- **Animated progress bars** - Added particle effects and smooth animations during cleaning
+- **Improved button labels** - X button shows "Toggle", Triangle shows "Back", O shows "Preview"
+- **Better visual feedback** - Enhanced UI with pulsing effects and animated borders
+
+#### Expanded Cleanup Coverage
+- **VPK files** - Complete support for Vita app installation files
+- **RetroArch temp files** - Comprehensive cleanup of emulator cache, logs, and temp data
+- **Crash dump files** - Enhanced `.psp2dmp.tmp` and related file detection
+- **Screenshot cleanup** - Automatic removal of `ux0:picture/SCREENSHOT/` files
+- **Package temp files** - Added `pkgj` temporary file cleanup
+
+#### Performance & Features
+- **Intelligent caching system** - `scan_cache.bin` speeds up subsequent scans
+- **Emergency stop functionality** - Safe interruption with O button during cleaning
+- **Profile-based cleaning** - Quick, Complete, and Selective cleaning modes
+- **Preview before delete** - See exactly what files will be removed
+
+#### UI/UX Improvements
+- **Particle effects** - Animated progress bars with flying particles
+- **Better color scheme** - Improved contrast and readability
+- **Responsive controls** - Clear button mappings for all screens
+- **Status indicators** - Real-time feedback during operations
+
+---
+
 ## [1.05] - 2025-11-02
 
 ### Added
