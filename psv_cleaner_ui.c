@@ -181,14 +181,20 @@ void showNotification(const char *title, const char *message) {
 typedef struct {
     int selected;
     int total_options;
-    char options[10][64];
-    int enabled[10];
+    int scrollOffset;
+    char options[12][64];
+    int enabled[12];
 } MenuOptions;
+
+
 
 typedef struct {
     FileList *fileList;
     int scrollOffset;
     int selectedFile;
+    SortMode sortMode;
+    char fileFilter[16];
+    unsigned long long totalVisibleSize;
 } PreviewState;
 
 typedef enum {
@@ -199,7 +205,8 @@ typedef enum {
 
 void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
     menu->selected = 0;
-    menu->total_options = 9;
+    menu->scrollOffset = 0;
+    menu->total_options = 12;
 
     strcpy(menu->options[0], "System Temp Files");
     strcpy(menu->options[1], "VitaShell Cache");
@@ -210,6 +217,9 @@ void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
     strcpy(menu->options[6], "Crash Dumps");
     strcpy(menu->options[7], "Exclusion Settings");
     strcpy(menu->options[8], "All Categories");
+    strcpy(menu->options[9], "Exclude Picture Folder");
+    strcpy(menu->options[10], "Exclude VPK Files");
+    strcpy(menu->options[11], "Exclude VitaDB Cache");
 
     switch (profile) {
         case PROFILE_QUICK:
@@ -222,16 +232,20 @@ void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
             menu->enabled[6] = 0;
             menu->enabled[7] = 1;
             menu->enabled[8] = 0;
+            menu->enabled[9] = 0;
+            menu->enabled[10] = 0;
             break;
 
         case PROFILE_COMPLETE:
-            for (int i = 0; i < 9; i++) {
+            for (int i = 0; i < 11; i++) {
                 menu->enabled[i] = 1;
             }
+            menu->enabled[9] = 0; // Don't exclude picture by default
+            menu->enabled[10] = 0; // Don't exclude VPK by default
             break;
 
         case PROFILE_SELECTIVE:
-            for (int i = 0; i < 9; i++) {
+            for (int i = 0; i < 11; i++) {
                 menu->enabled[i] = 0;
             }
             menu->enabled[7] = 1;
@@ -253,8 +267,14 @@ void drawOptionsMenu(vita2d_pgf *font, MenuOptions *menu) {
 
     vita2d_draw_rectangle(120, 155, 720, 310, RGBA(15, 25, 40, 200));
 
-    for (int i = 0; i < menu->total_options; i++) {
-        int y = 175 + (i * 34);
+    int maxVisible = 8;
+    int startIdx = menu->scrollOffset;
+    int endIdx = startIdx + maxVisible;
+    if (endIdx > menu->total_options) endIdx = menu->total_options;
+
+    for (int i = startIdx; i < endIdx; i++) {
+        int displayIndex = i - startIdx;
+        int y = 175 + (displayIndex * 34);
         int isSelected = (i == menu->selected);
 
         if (isSelected) {
@@ -295,6 +315,16 @@ void drawOptionsMenu(vita2d_pgf *font, MenuOptions *menu) {
         }
     }
 
+    if (menu->total_options > maxVisible) {
+        int scrollbarHeight = 300;
+        int scrollbarY = 175;
+        int thumbHeight = (maxVisible * scrollbarHeight) / menu->total_options;
+        int thumbY = scrollbarY + (menu->scrollOffset * scrollbarHeight) / menu->total_options;
+
+        vita2d_draw_rectangle(850, scrollbarY, 10, scrollbarHeight, RGBA(40, 40, 40, 255));
+        vita2d_draw_rectangle(850, thumbY, 10, thumbHeight, RGBA(100, 150, 200, 255));
+    }
+
     vita2d_draw_rectangle(105, 475, 750, 30, RGBA(15, 25, 40, 220));
     vita2d_draw_rectangle(105, 475, 750, 2, RGBA(0, 150, 255, 255));
 
@@ -322,29 +352,36 @@ void drawPreviewScreen(vita2d_pgf *font, PreviewState *preview) {
 
     vita2d_pgf_draw_text(font, 480 - 95, 40, RGBA(255, 255, 255, 255), 1.8f, "Preview - Files to Delete");
 
-    if (!preview->fileList || preview->fileList->count == 0) {
-        vita2d_pgf_draw_text(font, 480 - 100, 272, RGBA(255, 255, 100, 255), 1.2f, "No temporary files found!");
-    } else {
-        char infoText[256];
-        if (preview->fileList->totalSize < (1024 * 1024))
-            snprintf(infoText, sizeof(infoText), "Files: %d | Total: %llu KB",
-                    preview->fileList->count, preview->fileList->totalSize / 1024);
-        else if (preview->fileList->totalSize < (1024ULL * 1024 * 1024))
-            snprintf(infoText, sizeof(infoText), "Files: %d | Total: %.2f MB",
-                    preview->fileList->count, preview->fileList->totalSize / (1024.0 * 1024));
+    if (preview->fileList && preview->fileList->count > 0) {
+        char sortText[64];
+        const char* sortLabels[] = {"Name", "Size"};
+
+        snprintf(sortText, sizeof(sortText), "Sort: %s | Filter: %s",
+                sortLabels[preview->sortMode],
+                strlen(preview->fileFilter) > 0 ? preview->fileFilter : "All");
+
+        vita2d_pgf_draw_text(font, 30, 70, RGBA(150, 200, 255, 255), 0.9f, sortText);
+
+        char totalText[128];
+        if (preview->totalVisibleSize < (1024 * 1024))
+            snprintf(totalText, sizeof(totalText), "Files: %d | Total: %llu KB",
+                    preview->fileList->count, preview->totalVisibleSize / 1024);
+        else if (preview->totalVisibleSize < (1024ULL * 1024 * 1024))
+            snprintf(totalText, sizeof(totalText), "Files: %d | Total: %.2f MB",
+                    preview->fileList->count, preview->totalVisibleSize / (1024.0 * 1024));
         else
-            snprintf(infoText, sizeof(infoText), "Files: %d | Total: %.2f GB",
-                    preview->fileList->count, preview->fileList->totalSize / (1024.0 * 1024 * 1024));
+            snprintf(totalText, sizeof(totalText), "Files: %d | Total: %.2f GB",
+                    preview->fileList->count, preview->totalVisibleSize / (1024.0 * 1024 * 1024));
 
-        vita2d_pgf_draw_text(font, 30, 80, RGBA(100, 255, 100, 255), 1.0f, infoText);
+        vita2d_pgf_draw_text(font, 30, 90, RGBA(100, 255, 100, 255), 1.0f, totalText);
 
-        int maxVisible = 18;
+        int maxVisible = 16;
         int startIdx = preview->scrollOffset;
         int endIdx = startIdx + maxVisible;
         if (endIdx > preview->fileList->count) endIdx = preview->fileList->count;
 
         for (int i = startIdx; i < endIdx; i++) {
-            int y = 110 + ((i - startIdx) * 22);
+            int y = 120 + ((i - startIdx) * 22);
             int color = (i == preview->selectedFile) ? RGBA(255, 255, 100, 255) : RGBA(200, 200, 200, 255);
 
             if (i == preview->selectedFile) {
@@ -378,23 +415,24 @@ void drawPreviewScreen(vita2d_pgf *font, PreviewState *preview) {
         }
 
         if (preview->fileList->count > maxVisible) {
-            int scrollbarHeight = 400;
-            int scrollbarY = 110;
+            int scrollbarHeight = 350;
+            int scrollbarY = 120;
             int thumbHeight = (maxVisible * scrollbarHeight) / preview->fileList->count;
             int thumbY = scrollbarY + (preview->scrollOffset * scrollbarHeight) / preview->fileList->count;
 
             vita2d_draw_rectangle(945, scrollbarY, 10, scrollbarHeight, RGBA(40, 40, 40, 255));
             vita2d_draw_rectangle(945, thumbY, 10, thumbHeight, RGBA(100, 150, 200, 255));
         }
+    } else {
+        vita2d_pgf_draw_text(font, 480 - 100, 272, RGBA(255, 255, 100, 255), 1.2f, "No temporary files found!");
     }
 
     vita2d_draw_rectangle(0, 510, 960, 34, RGBA(20, 30, 50, 220));
     if (!preview->fileList || preview->fileList->count == 0) {
-        vita2d_pgf_draw_text(font, 30, 530, RGBA(200, 200, 200, 255), 0.8f,
-                            "O: Cancel");
+        vita2d_pgf_draw_text(font, 30, 530, RGBA(200, 200, 200, 255), 0.8f, "O: Cancel");
     } else {
         vita2d_pgf_draw_text(font, 30, 530, RGBA(200, 200, 200, 255), 0.8f,
-                            "D-Pad: scroll | X: Start cleaning | O: Cancel");
+                            "D-Pad: Navigate | △: Sort | □: Filter | X: Clean | O: Cancel");
     }
 
     vita2d_draw_rectangle(0, 0, 960, 2, RGBA(0, 150, 255, 255));
@@ -439,6 +477,9 @@ int main() {
     preview.fileList = NULL;
     preview.scrollOffset = 0;
     preview.selectedFile = 0;
+    preview.sortMode = SORT_BY_NAME;
+    strcpy(preview.fileFilter, "");
+    preview.totalVisibleSize = 0;
 
     int showMenu = 0;
     int showPreview = 0;
@@ -546,7 +587,7 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
             vita2d_draw_rectangle(0, 470, 960, 74, RGBA(15, 25, 40, 200));
             vita2d_draw_rectangle(0, 470, 960, 2, RGBA(0, 150, 255, 255));
 
-            vita2d_pgf_draw_text(font, 30, 495, RGBA(150, 200, 255, 255), 0.9f, "Version 1.06");
+            vita2d_pgf_draw_text(font, 30, 495, RGBA(150, 200, 255, 255), 0.9f, "Version 1.07");
 
             char statsText[128];
             snprintf(statsText, sizeof(statsText), "Ready to clean temporary files and optimize your PS Vita");
@@ -596,11 +637,34 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
             if (pad.buttons & SCE_CTRL_DOWN) {
                 if (preview.fileList && preview.selectedFile < preview.fileList->count - 1) {
                     preview.selectedFile++;
-                    if (preview.selectedFile >= preview.scrollOffset + 18) {
-                        preview.scrollOffset = preview.selectedFile - 17;
+                    if (preview.selectedFile >= preview.scrollOffset + 16) {
+                        preview.scrollOffset = preview.selectedFile - 15;
                     }
                 }
                 sceKernelDelayThread(100 * 1000);
+            }
+            if (pad.buttons & SCE_CTRL_TRIANGLE) {
+                preview.sortMode = (preview.sortMode == SORT_BY_NAME) ? SORT_BY_SIZE : SORT_BY_NAME;
+                if (preview.fileList) {
+                    filterAndSortFileList(preview.fileList, preview.sortMode, preview.fileFilter, &preview.totalVisibleSize);
+                }
+                sceKernelDelayThread(200 * 1000);
+            }
+            if (pad.buttons & SCE_CTRL_SQUARE) {
+                const char* filters[] = {"", "tmp", "log", "cache", "dmp", "vpk"};
+                int currentFilterIndex = 0;
+                for (int i = 0; i < 6; i++) {
+                    if (strcmp(preview.fileFilter, filters[i]) == 0) {
+                        currentFilterIndex = i;
+                        break;
+                    }
+                }
+                currentFilterIndex = (currentFilterIndex + 1) % 6;
+                strcpy(preview.fileFilter, filters[currentFilterIndex]);
+                if (preview.fileList) {
+                    filterAndSortFileList(preview.fileList, preview.sortMode, preview.fileFilter, &preview.totalVisibleSize);
+                }
+                sceKernelDelayThread(200 * 1000);
             }
             if (pad.buttons & SCE_CTRL_CROSS) {
                 if (preview.fileList && preview.fileList->count > 0) {
@@ -762,11 +826,22 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
             }
         } else if (showMenu) {
             if (pad.buttons & SCE_CTRL_UP) {
-                menu.selected = (menu.selected - 1 + menu.total_options) % menu.total_options;
+                if (menu.selected > 0) {
+                    menu.selected--;
+                    if (menu.selected < menu.scrollOffset) {
+                        menu.scrollOffset = menu.selected;
+                    }
+                }
                 sceKernelDelayThread(200 * 1000);
             }
             if (pad.buttons & SCE_CTRL_DOWN) {
-                menu.selected = (menu.selected + 1) % menu.total_options;
+                if (menu.selected < menu.total_options - 1) {
+                    menu.selected++;
+                    int maxVisible = 8;
+                    if (menu.selected >= menu.scrollOffset + maxVisible) {
+                        menu.scrollOffset = menu.selected - maxVisible + 1;
+                    }
+                }
                 sceKernelDelayThread(200 * 1000);
             }
             if (pad.buttons & SCE_CTRL_CROSS) {
@@ -774,6 +849,15 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
                     for (int i = 0; i < 7; i++) {
                         menu.enabled[i] = 1;
                     }
+                } else if (menu.selected == 9) {
+                    menu.enabled[menu.selected] = !menu.enabled[menu.selected];
+                    excludePictureFolder = menu.enabled[menu.selected];
+                } else if (menu.selected == 10) {
+                    menu.enabled[menu.selected] = !menu.enabled[menu.selected];
+                    excludeVpkFiles = menu.enabled[menu.selected];
+                } else if (menu.selected == 11) {
+                    menu.enabled[menu.selected] = !menu.enabled[menu.selected];
+                    excludeVitaDBCache = menu.enabled[menu.selected];
                 } else {
                     menu.enabled[menu.selected] = !menu.enabled[menu.selected];
                 }
@@ -808,6 +892,7 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
                 preview.fileList = createFileList();
                 if (preview.fileList) {
                     scanFilesForPreview(preview.fileList);
+                    filterAndSortFileList(preview.fileList, preview.sortMode, preview.fileFilter, &preview.totalVisibleSize);
                 }
 
                 showMenu = 0;
@@ -841,6 +926,7 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
                 preview.fileList = createFileList();
                 if (preview.fileList) {
                     scanFilesForPreview(preview.fileList);
+                    filterAndSortFileList(preview.fileList, preview.sortMode, preview.fileFilter, &preview.totalVisibleSize);
                 }
 
                 sceKernelDelayThread(200 * 1000);

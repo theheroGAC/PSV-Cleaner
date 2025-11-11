@@ -13,6 +13,11 @@ int g_deletedFilesCount = 0;
 int g_emergencyStop = 0;
 int g_operationInProgress = 0;
 
+// Exclusion settings
+int excludePictureFolder = 0;
+int excludeVpkFiles = 0;
+int excludeVitaDBCache = 0;
+
 #define CACHE_FILE_PATH "ux0:data/PSV_Cleaner/scan_cache.bin"
 #define CACHE_VERSION 1
 #define CACHE_EXPIRY_HOURS 24
@@ -90,6 +95,9 @@ const char *TEMP_PATHS[] = {
     "ux0:data/vitacheat/logs/",
     "ux0:data/rinCheat/logs/",
     "ux0:data/TropHAX/logs/",
+    "ux0:data/vitadb/cache/",
+    "ux0:data/vitadb/temp/",
+    "ux0:data/vitadb/logs/",
     "ux0:data/browser/cache/",
     "ux0:data/browser/temp/",
     "ux0:data/browser/logs/",
@@ -529,6 +537,19 @@ unsigned long long calculateTempSize() {
     }
 
     for(size_t i = 0; i < TEMP_PATHS_COUNT; i++){
+        // Skip picture paths if exclusion is enabled
+        if (excludePictureFolder && strncmp(TEMP_PATHS[i], "ux0:picture/", 12) == 0) {
+            continue;
+        }
+        // Skip VPK paths if exclusion is enabled
+        if (excludeVpkFiles && strstr(TEMP_PATHS[i], ".vpk") != NULL) {
+            continue;
+        }
+        // Skip VitaDB paths if exclusion is enabled
+        if (excludeVitaDBCache && strncmp(TEMP_PATHS[i], "ux0:data/vitadb/", 17) == 0) {
+            continue;
+        }
+
         unsigned long long pathSize = 0;
 
         if (cache && cache->entries[i].isValid && !hasDirectoryChanged(TEMP_PATHS[i], &cache->entries[i].lastModified)) {
@@ -565,16 +586,32 @@ unsigned long long cleanTemporaryFiles() {
 
     aggressiveDumpCleanup();
 
-    cleanupVpkFiles();
+    if (!excludeVpkFiles) {
+        cleanupVpkFiles();
+    }
 
     for(size_t i=0;i<TEMP_PATHS_COUNT;i++){
+        // Skip picture paths if exclusion is enabled
+        if (excludePictureFolder && strncmp(TEMP_PATHS[i], "ux0:picture/", 12) == 0) {
+            continue;
+        }
+        // Skip VPK paths if exclusion is enabled
+        if (excludeVpkFiles && strstr(TEMP_PATHS[i], ".vpk") != NULL) {
+            continue;
+        }
+        // Skip VitaDB paths if exclusion is enabled
+        if (excludeVitaDBCache && strncmp(TEMP_PATHS[i], "ux0:data/vitadb/", 17) == 0) {
+            continue;
+        }
         deleteRecursive(TEMP_PATHS[i]);
     }
 
     forceDeleteDumpFiles();
     aggressiveDumpCleanup();
 
-    cleanupVpkFiles();
+    if (!excludeVpkFiles) {
+        cleanupVpkFiles();
+    }
 
     sceIoRemove(CACHE_FILE_PATH);
 
@@ -658,6 +695,61 @@ void scanPathForPreview(FileList *list, const char *path) {
     }
 }
 
+int compareFilesByName(const void *a, const void *b) {
+    const FileInfo *fileA = (const FileInfo *)a;
+    const FileInfo *fileB = (const FileInfo *)b;
+    return strcmp(fileA->path, fileB->path);
+}
+
+int compareFilesBySize(const void *a, const void *b) {
+    const FileInfo *fileA = (const FileInfo *)a;
+    const FileInfo *fileB = (const FileInfo *)b;
+    if (fileA->size > fileB->size) return -1;
+    if (fileA->size < fileB->size) return 1;
+    return 0;
+}
+
+void sortFileList(FileList *list, SortMode sortMode) {
+    if (!list || list->count <= 1) return;
+
+    switch (sortMode) {
+        case SORT_BY_NAME:
+            qsort(list->files, list->count, sizeof(FileInfo), compareFilesByName);
+            break;
+        case SORT_BY_SIZE:
+            qsort(list->files, list->count, sizeof(FileInfo), compareFilesBySize);
+            break;
+    }
+}
+
+int matchesFileFilter(const char *filename, const char *filter) {
+    if (!filter || strlen(filter) == 0) return 1;
+
+    char *ext = strrchr(filename, '.');
+    if (!ext) return 0;
+
+    return strcasecmp(ext + 1, filter) == 0;
+}
+
+void filterAndSortFileList(FileList *list, SortMode sortMode, const char *fileFilter, unsigned long long *totalVisibleSize) {
+    if (!list) return;
+
+    sortFileList(list, sortMode);
+
+    if (totalVisibleSize) {
+        *totalVisibleSize = 0;
+        for (int i = 0; i < list->count; i++) {
+            char *filename = strrchr(list->files[i].path, '/');
+            if (filename) filename++;
+            else filename = list->files[i].path;
+
+            if (matchesFileFilter(filename, fileFilter)) {
+                *totalVisibleSize += list->files[i].size;
+            }
+        }
+    }
+}
+
 void scanFilesForPreview(FileList *list) {
     if (!list) return;
 
@@ -704,22 +796,24 @@ void scanFilesForPreview(FileList *list) {
         }
     }
 
-    SceUID vpkDfd = sceIoDopen("ux0:/");
-    if (vpkDfd >= 0) {
-        SceIoDirent vpkDir;
-        memset(&vpkDir, 0, sizeof(SceIoDirent));
+    if (!excludeVpkFiles) {
+        SceUID vpkDfd = sceIoDopen("ux0:/");
+        if (vpkDfd >= 0) {
+            SceIoDirent vpkDir;
+            memset(&vpkDir, 0, sizeof(SceIoDirent));
 
-        while (sceIoDread(vpkDfd, &vpkDir) > 0) {
-            if (SCE_S_ISDIR(vpkDir.d_stat.st_mode)) continue;
+            while (sceIoDread(vpkDfd, &vpkDir) > 0) {
+                if (SCE_S_ISDIR(vpkDir.d_stat.st_mode)) continue;
 
-            char* filename = vpkDir.d_name;
-            int len = strlen(filename);
-            if (len > 4 && strcmp(filename + len - 4, ".vpk") == 0) {
-                char fullPath[512];
-                snprintf(fullPath, sizeof(fullPath), "ux0:/%s", filename);
-                addFileToList(list, fullPath, vpkDir.d_stat.st_size);
+                char* filename = vpkDir.d_name;
+                int len = strlen(filename);
+                if (len > 4 && strcmp(filename + len - 4, ".vpk") == 0) {
+                    char fullPath[512];
+                    snprintf(fullPath, sizeof(fullPath), "ux0:/%s", filename);
+                    addFileToList(list, fullPath, vpkDir.d_stat.st_size);
+                }
             }
+            sceIoDclose(vpkDfd);
         }
-        sceIoDclose(vpkDfd);
     }
 }

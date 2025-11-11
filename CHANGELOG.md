@@ -1,189 +1,91 @@
-# Changelog
+# PSV Cleaner Changelog
 
-All notable changes to PSV Cleaner will be documented in this file.
+## Version 1.07 - November 11, 2025
 
-## [1.06] - 2025-11-05
+Big update! Added a ton of new features that make cleaning way more useful and fun.
 
-### Major Improvements
+### New Stuff
+- **Smart Preview Mode**: You can now see all files before deleting them, sort by name or size, and filter by file type (tmp, log, cache, etc.). Super helpful for knowing exactly what you're cleaning!
+- **VitaDB Support**: Added full support for cleaning VitaDB's cache and temp files. You can choose to exclude VitaDB cache if you want to keep it fast.
+- **Better Exclusions**: Added options to exclude picture folders and VPK files from cleaning. More control over what gets deleted.
 
-#### Codebase Cleanup
-- **Removed ALL comments** - Completely comment-free codebase for cleaner, more professional code
-- **Streamlined structure** - Minimalist C code with zero unnecessary documentation
-
-#### Critical Bug Fixes
-- **Fixed VPK file deletion** - Now properly deletes `.vpk` files from `ux0:/` root directory
-- **Fixed UI button labels** - Corrected duplicate and inaccurate button descriptions in advanced options
-- **Fixed wildcard pattern handling** - VPK files now use proper directory scanning instead of broken wildcards
-
-#### Enhanced User Experience
-- **Animated progress bars** - Added particle effects and smooth animations during cleaning
-- **Improved button labels** - X button shows "Toggle", Triangle shows "Back", O shows "Preview"
-- **Better visual feedback** - Enhanced UI with pulsing effects and animated borders
-
-#### Expanded Cleanup Coverage
-- **VPK files** - Complete support for Vita app installation files
-- **RetroArch temp files** - Comprehensive cleanup of emulator cache, logs, and temp data
-- **Crash dump files** - Enhanced `.psp2dmp.tmp` and related file detection
-- **Screenshot cleanup** - Automatic removal of `ux0:picture/SCREENSHOT/` files
-- **Package temp files** - Added `pkgj` temporary file cleanup
-
-#### Performance & Features
-- **Intelligent caching system** - `scan_cache.bin` speeds up subsequent scans
-- **Emergency stop functionality** - Safe interruption with O button during cleaning
-- **Profile-based cleaning** - Quick, Complete, and Selective cleaning modes
-- **Preview before delete** - See exactly what files will be removed
-
-#### UI/UX Improvements
-- **Particle effects** - Animated progress bars with flying particles
-- **Better color scheme** - Improved contrast and readability
-- **Responsive controls** - Clear button mappings for all screens
-- **Status indicators** - Real-time feedback during operations
+### Improved Controls
+- **Preview Screen**: Use △ to sort files, □ to filter by type, D-Pad to navigate, X to clean, O to cancel
+- **Menu Scrolling**: Long menus now scroll properly with a visual scrollbar
+- **Better Feedback**: Everything feels more responsive and clear
+- Expanded cleanup to cover even more temp files and caches
 
 ---
 
-## [1.05] - 2025-11-02
+## Version 1.06 - November 5, 2025
 
-### Added
-- **Intelligent Caching System** - Revolutionary performance improvement for file scanning
-  - **Smart Cache Storage** - Saves scan results to avoid rescanning unchanged directories
-  - **Directory Change Detection** - Automatically detects when directories have been modified
-  - **Cache Expiration** - 24-hour cache validity with automatic refresh
-  - **Instant Loading** - Up to 5x faster startup times for subsequent app launches
-  - **Memory Efficient** - Optimized cache structure with validation and error handling
+This was a big cleanup and improvement release. Made the app faster and more reliable.
 
-- **Code Optimization & Cleanup** - Streamlined codebase for better maintainability
-  - **Removed Legacy Code** - Eliminated CloneDVD sound references and unused functions
-  - **Splash Screen Removal** - Removed unnecessary splash screen for faster app startup
-  - **Comment Cleanup** - Removed obsolete comments and improved code documentation
-  - **Resource Optimization** - Eliminated unused assets and reduced package size
+### What Changed
+- **Fixed VPK File Deletion**: Now actually deletes .vpk files properly from the root directory
+- **Better UI**: Fixed button labels and made the interface clearer
+- **More Cleanup**: Added support for RetroArch temp files, crash dumps, screenshots, and package temp files
+- **Animations**: Added particle effects to the progress bar - makes waiting more fun
+- **Smart Caching**: The app remembers previous scans to start up faster next time
+- **Emergency Stop**: You can safely stop cleaning mid-operation with the O button
 
-### Performance Improvements
-- **Intelligent Scanning** - Cache-based directory scanning with change detection
-- **Faster Startup** - Reduced initialization time through caching system
-- **Memory Optimization** - Better memory management for large file operations
-- **I/O Reduction** - Minimized disk access through intelligent caching
-
-### Technical Enhancements
-- **Cache Management** - Automatic cache invalidation after cleaning operations
-- **Error Handling** - Robust cache validation and fallback mechanisms
-- **Version Control** - Cache versioning for future compatibility
-- **Resource Cleanup** - Proper cleanup of cache files and temporary resources
-
-### UI/UX Improvements
-- **Faster Response** - Instant app responsiveness through caching
-- **Cleaner Interface** - Removed visual clutter and unnecessary elements
-- **Improved Performance** - Smoother operation with reduced loading times
+### Performance
+- Much faster scanning thanks to the caching system
+- Better memory management for large file operations
+- Cleaner codebase with no unnecessary code
 
 ---
 
-## [1.04] - 2025-10-13
+## Version 1.05 - November 2, 2025
 
-### Added
-- **Emergency Stop System** - Safe interruption of cleaning operations
-  - **Real-time Stop** - Press Circle button during cleaning to stop safely
-  - **Operation Tracking** - Monitors active operations and cleanup state
-  - **Emergency Screen** - Clear feedback when operation is interrupted
-  - **Partial Results Display** - Shows statistics of files actually deleted before interruption
-  - **Safe Cleanup** - Proper resource cleanup when stopping mid-operation
-  - **Visual Feedback** - Progress bar shows "Stopping operation..." when stopping
+Focused on making the app faster and more efficient.
 
-- **Enhanced User Safety** - Improved operation control
-  - **Graceful Interruption Handling** - Clear user feedback during emergency stops
-  - **System State Preservation** - Recovery options after emergency stop
-  - **Informative Emergency Screen** - Details about what happened during interruption
-
-### Technical
-- **Emergency Stop Flags** - Global flags for operation state tracking
-- **Safe Operation Lifecycle** - Start/end/cleanup operation management functions
-- **Improved Progress Bar** - Visual feedback for emergency stop requests
-- **Resource Cleanup Functions** - Proper cleanup when operations are interrupted
-
-### UI & UX Improvements
-- **Operation Management Indicators** - Better handling of long-running operations
-- **Emergency Stop Request Handling** - Safe state transitions during interruptions
-- **User Confirmation for Interrupted Operations** - Clear messaging about operation status
+### Key Changes
+- **Smart Caching System**: The app now saves scan results and only rescans when directories change. Startup is way faster!
+- **Code Cleanup**: Removed old unused code and comments to make everything cleaner
+- **Performance**: Up to 5x faster loading on subsequent runs
+- **Memory**: Better memory usage and cleanup
 
 ---
 
-## [1.02] - 2025-10-01
+## Version 1.04 - October 13, 2025
 
-### Added
-- **File Preview System** - View all files that will be deleted before cleaning with detailed list
-  - Scrollable file list supporting thousands of files
-  - Individual file sizes displayed
-  - Total files count and size summary
-  - Navigate with D-Pad Up/Down
-  - Confirm with X or cancel with O
-  
-- **Enhanced File Detection** - Added 40+ new cleaning paths
-  - VitaGrafix cache and logs
-  - reF00D cache
-  - NoNpDrm temporary files
-  - 0syscall6 cache
-  - TAI plugin system cache
-  - PSVshell logs and cache
-  - SaveManager logs
-  - VitaCheat, rinCheat, TropHAX logs
-  - WebKit cache and localstorage
-  - Network temporary files
-  - SQLite temporary databases
-  - Package installation temp files
-  - Media thumbnails (picture, video, music)
-  - RetroArch shader cache
-  - Background download temp files
-  - And more...
+Added safety features for long cleaning operations.
 
-- **Statistics Display** - Detailed completion screen showing:
-  - Total space freed
-  - Number of files deleted
-  - Visual success indicator
-
-- **Dump File Detection** - Special scanning for crash dump files
-  - Detects .psp2dmp files in ux0:data/
-  - Detects .psp2core files in ux0:data/
-  - Shows in preview list before deletion
-
-### Improved
-- **Recursive Space Calculation** - Fixed space calculation to scan subdirectories
-  - Now correctly calculates all temporary files in nested folders
-  - More accurate space estimation before cleaning
-  
-- **Auto-Refresh After Cleaning** - Space available automatically recalculates after each cleaning session
-  - No more stuck at zero after cleaning
-  - Fresh calculation on every app launch
-
-- **Memory Management** - Dynamic file list with automatic expansion
-  - Efficient memory allocation for large file lists
-  - Proper cleanup to prevent memory leaks
-
-### Fixed
-- Space calculation showing zero after cleaning
-- Missing files in subdirectories during scan
-- Crash dump files not appearing in preview
-
-### Technical
-- Total cleaning paths increased from 54 to 94
-- Added global file counter for deletion tracking
-- Improved recursive directory scanning algorithm
-- Enhanced preview system with scrollbar for large lists
+### New Features
+- **Emergency Stop**: Press the O button during cleaning to safely stop the operation
+- **Better Feedback**: Clear messages when operations are interrupted
+- **Safe Interruption**: The app handles stops gracefully without corrupting anything
 
 ---
 
-## [1.01] - Previous Release
+## Version 1.02 - October 1, 2025
 
-### Features
-- Basic temporary file cleaning
-- VitaShell, PKGi, RetroArch cache cleaning
-- Progress bar with percentage
-- GPU-optimized rendering
-- Options menu for selective cleaning
+Major expansion of what the app can clean!
+
+### Big Additions
+- **File Preview**: See exactly what files will be deleted before you clean them
+- **Way More Cleanup Paths**: Added 40+ new locations to clean, including:
+  - VitaGrafix, reF00D, NoNpDrm caches
+  - WebKit and network temp files
+  - Media thumbnails and RetroArch shaders
+  - SQLite databases and package files
+- **Statistics**: Shows how much space you freed and how many files were deleted
+- **Crash Dump Detection**: Finds and shows .psp2dmp and .psp2core files
+
+### Fixes
+- Space calculation now works correctly in subdirectories
+- Auto-refreshes space available after cleaning
+- Better memory management for large file lists
 
 ---
 
-## [1.00] - Initial Release
+## Version 1.01 - Previous Release
 
-### Features
-- First public release
-- Clean system temporary files
-- Clean homebrew cache and logs
-- Simple UI with progress indication
+Basic cleaning functionality with progress indication.
+
+---
+
+## Version 1.00 - Initial Release
+
+First version! Could clean basic temp files and had a simple interface.

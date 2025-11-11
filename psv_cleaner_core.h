@@ -7,6 +7,11 @@
 // Define RGBA macro for color values
 #define RGBA(r,g,b,a) ((a) << 24 | (r) << 16 | (g) << 8 | (b))
 
+typedef enum {
+    SORT_BY_NAME = 0,
+    SORT_BY_SIZE = 1
+} SortMode;
+
 // List of temporary folders to clean
 extern const char *TEMP_PATHS[];
 extern const size_t TEMP_PATHS_COUNT;
@@ -31,6 +36,11 @@ extern int g_deletedFilesCount;
 extern int g_emergencyStop;
 extern int g_operationInProgress;
 
+// Exclusion settings
+extern int excludePictureFolder;
+extern int excludeVpkFiles;
+extern int excludeVitaDBCache;
+
 // Cleanup counter functionality
 int loadCleanupCounter();
 void saveCleanupCounter(int count);
@@ -50,6 +60,8 @@ FileList* createFileList();
 void freeFileList(FileList *list);
 void addFileToList(FileList *list, const char *path, unsigned long long size);
 void scanFilesForPreview(FileList *list);
+void sortFileList(FileList *list, SortMode sortMode);
+void filterAndSortFileList(FileList *list, SortMode sortMode, const char *fileFilter, unsigned long long *totalVisibleSize);
 
 // Emergency stop system functions
 void initEmergencyStop();
