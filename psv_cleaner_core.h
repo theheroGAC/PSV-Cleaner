@@ -41,6 +41,13 @@ extern int excludePictureFolder;
 extern int excludeVpkFiles;
 extern int excludeVitaDBCache;
 
+// Selective app cleaning settings
+extern int cleanVitaShell;
+extern int cleanRetroArch;
+extern int cleanAdrenaline;
+extern int cleanBrowser;
+extern int cleanSystem;
+
 // Cleanup counter functionality
 int loadCleanupCounter();
 void saveCleanupCounter(int count);
@@ -62,6 +69,7 @@ void addFileToList(FileList *list, const char *path, unsigned long long size);
 void scanFilesForPreview(FileList *list);
 void sortFileList(FileList *list, SortMode sortMode);
 void filterAndSortFileList(FileList *list, SortMode sortMode, const char *fileFilter, unsigned long long *totalVisibleSize);
+int deleteSingleFileFromList(FileList *list, int index);
 
 // Emergency stop system functions
 void initEmergencyStop();

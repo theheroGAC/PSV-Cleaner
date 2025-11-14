@@ -170,7 +170,11 @@ void drawProgressBar(vita2d_pgf *font, int percent) {
     static int borderAnim = 0;
     borderAnim = (borderAnim + 1) % 100;
     int borderColor = RGBA(0, 200 + borderAnim / 2, 0, 255);
+    vita2d_draw_rectangle(0, 0, 960, 1, RGBA(50, 255, 50, 100));
+    vita2d_draw_rectangle(0, 1, 960, 1, RGBA(25, 225, 25, 150));
     vita2d_draw_rectangle(0, 0, 960, 2, borderColor);
+    vita2d_draw_rectangle(0, 542, 960, 1, RGBA(50, 255, 50, 100));
+    vita2d_draw_rectangle(0, 543, 960, 1, RGBA(25, 225, 25, 150));
     vita2d_draw_rectangle(0, 542, 960, 2, borderColor);
 }
 
@@ -196,6 +200,59 @@ typedef struct {
     char fileFilter[16];
     unsigned long long totalVisibleSize;
 } PreviewState;
+
+void drawDeleteConfirmation(vita2d_pgf *font, PreviewState *preview) {
+    vita2d_draw_rectangle(0, 0, 960, 544, RGBA(0, 0, 0, 180));
+
+    vita2d_draw_rectangle(200, 180, 560, 200, RGBA(20, 30, 50, 250));
+    vita2d_draw_rectangle(205, 185, 550, 190, RGBA(30, 40, 60, 255));
+
+    vita2d_pgf_draw_text(font, 480 - 120, 220, RGBA(255, 255, 255, 255), 1.4f, "Delete File Confirmation");
+
+    char filename[80];
+    if (preview->fileList && preview->selectedFile >= 0 && preview->selectedFile < preview->fileList->count) {
+        char *path = preview->fileList->files[preview->selectedFile].path;
+        char *basename = strrchr(path, '/');
+        if (basename) {
+            basename++;
+        } else {
+            basename = path;
+        }
+        if (strlen(basename) > 70) {
+            strncpy(filename, basename, 67);
+            filename[67] = '.';
+            filename[68] = '.';
+            filename[69] = '.';
+            filename[70] = '\0';
+        } else {
+            strcpy(filename, basename);
+        }
+    }
+
+    vita2d_pgf_draw_text(font, 480 - 200, 260, RGBA(255, 255, 100, 255), 1.0f, "Are you sure you want to delete this file?");
+
+    vita2d_draw_rectangle(220, 290, 520, 2, RGBA(100, 150, 200, 255));
+
+    vita2d_pgf_draw_text(font, 240, 320, RGBA(200, 200, 200, 255), 0.9f, filename);
+
+    char sizeText[32];
+    if (preview->fileList && preview->selectedFile >= 0 && preview->selectedFile < preview->fileList->count) {
+        unsigned long long size = preview->fileList->files[preview->selectedFile].size;
+        if (size < 1024)
+            snprintf(sizeText, sizeof(sizeText), "%llu bytes", size);
+        else if (size < (1024 * 1024))
+            snprintf(sizeText, sizeof(sizeText), "%.1f KB", size / 1024.0);
+        else if (size < (1024ULL * 1024 * 1024))
+            snprintf(sizeText, sizeof(sizeText), "%.1f MB", size / (1024.0 * 1024));
+        else
+            snprintf(sizeText, sizeof(sizeText), "%.1f GB", size / (1024.0 * 1024 * 1024));
+    }
+
+    vita2d_pgf_draw_text(font, 240, 350, RGBA(150, 200, 255, 255), 0.9f, sizeText);
+
+    vita2d_draw_rectangle(0, 500, 960, 44, RGBA(15, 25, 40, 220));
+    vita2d_pgf_draw_text(font, 30, 530, RGBA(200, 200, 200, 255), 0.8f, "X: Delete File | O: Cancel");
+}
 
 typedef enum {
     PROFILE_QUICK = 0,
@@ -432,7 +489,7 @@ void drawPreviewScreen(vita2d_pgf *font, PreviewState *preview) {
         vita2d_pgf_draw_text(font, 30, 530, RGBA(200, 200, 200, 255), 0.8f, "O: Cancel");
     } else {
         vita2d_pgf_draw_text(font, 30, 530, RGBA(200, 200, 200, 255), 0.8f,
-                            "D-Pad: Navigate | △: Sort | □: Filter | X: Clean | O: Cancel");
+                            "D-Pad: Navigate | △: Sort | □: Filter | SELECT: Delete | X: Clean All | O: Cancel");
     }
 
     vita2d_draw_rectangle(0, 0, 960, 2, RGBA(0, 150, 255, 255));
@@ -483,6 +540,7 @@ int main() {
 
     int showMenu = 0;
     int showPreview = 0;
+    int showDeleteConfirmation = 0;
     int showProfileSelect = 1;
     CleaningProfile selectedProfile = PROFILE_COMPLETE;
     int running = 1;
@@ -507,7 +565,11 @@ int main() {
         vita2d_start_drawing();
         vita2d_clear_screen();
 
-        vita2d_draw_rectangle(0, 0, 960, 544, RGBA(20, 30, 50, 255));
+    for (int y = 0; y < 544; y += 10) {
+        int alpha = 255 - (y * 100) / 544;
+        if (alpha < 150) alpha = 150;
+        vita2d_draw_rectangle(0, y, 960, 10, RGBA(15 + y/40, 20 + y/30, 35 + y/25, alpha));
+    }
 
         vita2d_pgf_draw_text(font, 480 - 80, 82, RGBA(0, 0, 0, 150), 2.2f, "PSV Cleaner");
         vita2d_pgf_draw_text(font, 480 - 82, 80, RGBA(100, 200, 255, 255), 2.2f, "PSV Cleaner");
@@ -547,6 +609,8 @@ int main() {
 
             vita2d_draw_rectangle(0, 500, 960, 44, RGBA(15, 25, 40, 220));
             vita2d_pgf_draw_text(font, 30, 525, RGBA(200, 200, 200, 255), 0.9f, "D-Pad: Navigate | X: Select Profile | O: Exit");
+        } else if (showDeleteConfirmation) {
+            drawDeleteConfirmation(font, &preview);
         } else if (showPreview) {
             drawPreviewScreen(font, &preview);
         } else if (showMenu) {
@@ -557,9 +621,14 @@ int main() {
 
             vita2d_draw_rectangle(200, 180, 560, 3, RGBA(0, 200, 255, 255));
 
-            vita2d_draw_rectangle(220, 210, 50, 45, RGBA(0, 150, 255, 150));
+            for (int i = 0; i < 45; i++) {
+                int alpha = 150 + (i * 50) / 45;
+                if (alpha > 200) alpha = 200;
+                vita2d_draw_rectangle(220, 210 + i, 50, 1, RGBA(0, 150 + i/3, 255 + i/5, alpha));
+            }
             vita2d_draw_rectangle(225, 215, 40, 35, RGBA(40, 60, 80, 255));
             vita2d_draw_rectangle(230, 220, 30, 25, RGBA(0, 180, 255, 200));
+            vita2d_draw_rectangle(220, 210, 50, 3, RGBA(100, 200, 255, 180));
 
             vita2d_pgf_draw_text(font, 290, 220, RGBA(100, 255, 255, 255), 1.0f, L(lang_ui_text, currentLanguage, 0));
             vita2d_pgf_draw_text(font, 290, 250, RGBA(255, 255, 100, 255), 1.4f, L(lang_ui_text, currentLanguage, 1));
@@ -587,7 +656,7 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
             vita2d_draw_rectangle(0, 470, 960, 74, RGBA(15, 25, 40, 200));
             vita2d_draw_rectangle(0, 470, 960, 2, RGBA(0, 150, 255, 255));
 
-            vita2d_pgf_draw_text(font, 30, 495, RGBA(150, 200, 255, 255), 0.9f, "Version 1.07");
+            vita2d_pgf_draw_text(font, 30, 495, RGBA(150, 200, 255, 255), 0.9f, "Version 1.08");
 
             char statsText[128];
             snprintf(statsText, sizeof(statsText), "Ready to clean temporary files and optimize your PS Vita");
@@ -623,6 +692,24 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
             }
             if (pad.buttons & SCE_CTRL_CIRCLE) {
                 running = 0;
+            }
+        } else if (showDeleteConfirmation) {
+            if (pad.buttons & SCE_CTRL_CROSS) {
+                if (preview.fileList && preview.fileList->count > 0 && preview.selectedFile >= 0 && preview.selectedFile < preview.fileList->count) {
+                    if (deleteSingleFileFromList(preview.fileList, preview.selectedFile)) {
+                        filterAndSortFileList(preview.fileList, preview.sortMode, preview.fileFilter, &preview.totalVisibleSize);
+
+                        if (preview.selectedFile >= preview.fileList->count && preview.fileList->count > 0) {
+                            preview.selectedFile = preview.fileList->count - 1;
+                        }
+                    }
+                }
+                showDeleteConfirmation = 0;
+                sceKernelDelayThread(200 * 1000);
+            }
+            if (pad.buttons & SCE_CTRL_CIRCLE) {
+                showDeleteConfirmation = 0;
+                sceKernelDelayThread(200 * 1000);
             }
         } else if (showPreview) {
             if (pad.buttons & SCE_CTRL_UP) {
@@ -663,6 +750,12 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
                 strcpy(preview.fileFilter, filters[currentFilterIndex]);
                 if (preview.fileList) {
                     filterAndSortFileList(preview.fileList, preview.sortMode, preview.fileFilter, &preview.totalVisibleSize);
+                }
+                sceKernelDelayThread(200 * 1000);
+            }
+            if (pad.buttons & SCE_CTRL_SELECT) {
+                if (preview.fileList && preview.fileList->count > 0 && preview.selectedFile >= 0 && preview.selectedFile < preview.fileList->count) {
+                    showDeleteConfirmation = 1;
                 }
                 sceKernelDelayThread(200 * 1000);
             }

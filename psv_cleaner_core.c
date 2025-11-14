@@ -18,6 +18,13 @@ int excludePictureFolder = 0;
 int excludeVpkFiles = 0;
 int excludeVitaDBCache = 0;
 
+// Selective app cleaning settings
+int cleanVitaShell = 1;
+int cleanRetroArch = 1;
+int cleanAdrenaline = 1;
+int cleanBrowser = 1;
+int cleanSystem = 1;
+
 #define CACHE_FILE_PATH "ux0:data/PSV_Cleaner/scan_cache.bin"
 #define CACHE_VERSION 1
 #define CACHE_EXPIRY_HOURS 24
@@ -77,27 +84,21 @@ const char *TEMP_PATHS[] = {
     "ux0:data/Adrenaline/dumps/",
     "ux0:data/moonlight/cache/",
     "ux0:data/moonlight/logs/",
-    "ux0:data/autoplugin/cache/",
-    "ux0:data/autoplugin/logs/",
-    "ux0:data/autoplugin2/cache/",
-    "ux0:data/autoplugin2/logs/",
+    "ux0:data/AutoPlugin/cache/",
+    "ux0:data/AutoPlugin/logs/",
+    "ux0:data/AUTOPLUGIN2/cache/",
+    "ux0:data/AUTOPLUGIN2/logs/",
+    "ux0:data/RetroFlow/CACHE/",
     "ux0:data/henkaku/cache/",
     "ux0:data/henkaku/logs/",
-    "ux0:data/VitaGrafix/cache/",
-    "ux0:data/VitaGrafix/logs/",
-    "ux0:data/reF00D/cache/",
-    "ux0:data/NoNpDrm/temp/",
-    "ux0:data/0syscall6/cache/",
-    "ux0:data/tai/cache/",
     "ux0:data/PSVshell/logs/",
     "ux0:data/PSVshell/cache/",
     "ux0:data/savemgr/log/",
     "ux0:data/vitacheat/logs/",
     "ux0:data/rinCheat/logs/",
-    "ux0:data/TropHAX/logs/",
-    "ux0:data/vitadb/cache/",
-    "ux0:data/vitadb/temp/",
-    "ux0:data/vitadb/logs/",
+    "ux0:data/VitaDB/temp.tmp",
+    "ux0:vdb_data/",
+    "ux0:data/vdb_vpk/",
     "ux0:data/browser/cache/",
     "ux0:data/browser/temp/",
     "ux0:data/browser/logs/",
@@ -128,6 +129,46 @@ const char *TEMP_PATHS[] = {
     "uma0:log/",
     "uma0:data/temp/",
     "uma0:data/cache/",
+    "uma0:VitaShell/cache/",
+    "uma0:VitaShell/temp/",
+    "uma0:VitaShell/log/",
+    "uma0:pkgi/cache/",
+    "uma0:pkgi/log/",
+    "uma0:data/retroarch/cache/",
+    "uma0:data/retroarch/logs/",
+    "uma0:data/retroarch/temp/",
+    "uma0:data/Adrenaline/cache/",
+    "uma0:data/Adrenaline/logs/",
+    "uma0:data/Adrenaline/temp/",
+    "uma0:data/moonlight/cache/",
+    "uma0:data/moonlight/logs/",
+    "uma0:data/AutoPlugin/cache/",
+    "uma0:data/AutoPlugin/logs/",
+    "uma0:data/AUTOPLUGIN2/cache/",
+    "uma0:data/AUTOPLUGIN2/logs/",
+    "uma0:data/RetroFlow/CACHE/",
+    "uma0:data/henkaku/cache/",
+    "uma0:data/henkaku/logs/",
+    "uma0:data/PSVshell/logs/",
+    "uma0:data/PSVshell/cache/",
+    "uma0:data/savemgr/log/",
+    "uma0:data/vitacheat/logs/",
+    "uma0:data/rinCheat/logs/",
+    "uma0:data/browser/cache/",
+    "uma0:data/browser/temp/",
+    "uma0:data/browser/logs/",
+    "uma0:data/webkit/cache/",
+    "uma0:data/webkit/localstorage/temp/",
+    "uma0:data/net/temp/",
+    "uma0:download/",
+    "uma0:download/temp/",
+    "uma0:downloads/",
+    "uma0:downloads/temp/",
+    "uma0:bgdl/t/",
+    "uma0:data/pkg/temp/",
+    "uma0:package/temp/",
+    "uma0:appmeta/temp/",
+    "uma0:data/logs/temp/",
     "ux0:data/psp2core*",
     "ux0:data/*.psp2core",
     "ux0:data/psp2dmp*",
@@ -546,7 +587,25 @@ unsigned long long calculateTempSize() {
             continue;
         }
         // Skip VitaDB paths if exclusion is enabled
-        if (excludeVitaDBCache && strncmp(TEMP_PATHS[i], "ux0:data/vitadb/", 17) == 0) {
+        if (excludeVitaDBCache && strncmp(TEMP_PATHS[i], "ux0:data/VitaDB/", 17) == 0) {
+            continue;
+        }
+        // Selective app cleaning
+        if (!cleanVitaShell && strstr(TEMP_PATHS[i], "VitaShell/")) {
+            continue;
+        }
+        if (!cleanRetroArch && strstr(TEMP_PATHS[i], "retroarch/")) {
+            continue;
+        }
+        if (!cleanAdrenaline && strstr(TEMP_PATHS[i], "Adrenaline/")) {
+            continue;
+        }
+        if (!cleanBrowser && (strstr(TEMP_PATHS[i], "browser/") || strstr(TEMP_PATHS[i], "webkit/"))) {
+            continue;
+        }
+        // System paths are always cleaned if cleanSystem is enabled
+        if (!cleanSystem && (strstr(TEMP_PATHS[i], "ux0:temp/") || strstr(TEMP_PATHS[i], "ux0:cache/") || strstr(TEMP_PATHS[i], "ux0:log/") ||
+            strstr(TEMP_PATHS[i], "AutoPlugin/") || strstr(TEMP_PATHS[i], "AUTOPLUGIN2/"))) {
             continue;
         }
 
@@ -600,7 +659,25 @@ unsigned long long cleanTemporaryFiles() {
             continue;
         }
         // Skip VitaDB paths if exclusion is enabled
-        if (excludeVitaDBCache && strncmp(TEMP_PATHS[i], "ux0:data/vitadb/", 17) == 0) {
+        if (excludeVitaDBCache && strncmp(TEMP_PATHS[i], "ux0:data/VitaDB/", 17) == 0) {
+            continue;
+        }
+        // Selective app cleaning
+        if (!cleanVitaShell && strstr(TEMP_PATHS[i], "VitaShell/")) {
+            continue;
+        }
+        if (!cleanRetroArch && strstr(TEMP_PATHS[i], "retroarch/")) {
+            continue;
+        }
+        if (!cleanAdrenaline && strstr(TEMP_PATHS[i], "Adrenaline/")) {
+            continue;
+        }
+        if (!cleanBrowser && (strstr(TEMP_PATHS[i], "browser/") || strstr(TEMP_PATHS[i], "webkit/"))) {
+            continue;
+        }
+        // System paths are always cleaned if cleanSystem is enabled
+        if (!cleanSystem && (strstr(TEMP_PATHS[i], "ux0:temp/") || strstr(TEMP_PATHS[i], "ux0:cache/") || strstr(TEMP_PATHS[i], "ux0:log/") ||
+            strstr(TEMP_PATHS[i], "AutoPlugin/") || strstr(TEMP_PATHS[i], "AUTOPLUGIN2/"))) {
             continue;
         }
         deleteRecursive(TEMP_PATHS[i]);
@@ -748,6 +825,29 @@ void filterAndSortFileList(FileList *list, SortMode sortMode, const char *fileFi
             }
         }
     }
+}
+
+int deleteSingleFileFromList(FileList *list, int index) {
+    if (!list || index < 0 || index >= list->count) {
+        return 0;
+    }
+
+    if (sceIoRemove(list->files[index].path) >= 0) {
+        unsigned long long removedSize = list->files[index].size;
+
+        for (int i = index; i < list->count - 1; i++) {
+            list->files[i] = list->files[i + 1];
+        }
+
+        list->count--;
+        list->totalSize -= removedSize;
+
+        g_deletedFilesCount++;
+
+        return 1;
+    }
+
+    return 0;
 }
 
 void scanFilesForPreview(FileList *list) {
