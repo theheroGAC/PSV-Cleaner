@@ -2,23 +2,84 @@
 #define PSV_CLEANER_CORE_H
 
 #include <stddef.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdarg.h>
 #include <psp2/apputil.h>
 
 // Define RGBA macro for color values
 #define RGBA(r,g,b,a) ((a) << 24 | (r) << 16 | (g) << 8 | (b))
+
+// Safe buffer sizes to prevent overflow
+#define MAX_PATH_LENGTH 1024
+#define MAX_FILENAME_LENGTH 256
+#define MAX_FILE_FILTER_LENGTH 32
+
+// Safe string functions to prevent buffer overflows
+#define safe_strncpy(dest, src, size) do { \
+    if (size > 0) { \
+        dest[0] = '\0'; \
+        size_t len = strlen(src); \
+        if (len < size) { \
+            memcpy(dest, src, len); \
+            dest[len] = '\0'; \
+        } else if (size > 1) { \
+            memcpy(dest, src, size - 1); \
+            dest[size - 1] = '\0'; \
+        } \
+    } \
+} while(0)
+
+#define safe_strncat(dest, src, dest_size) do { \
+    if (dest_size > 0 && strlen(dest) < dest_size - 1) { \
+        size_t remaining = dest_size - strlen(dest) - 1; \
+        size_t copy_len = strlen(src); \
+        if (copy_len > remaining) copy_len = remaining; \
+        memcpy(dest + strlen(dest), src, copy_len); \
+        dest[strlen(dest) + copy_len] = '\0'; \
+    } \
+} while(0)
+
+// Safe sprintf wrapper
+static inline int safe_snprintf(char *buffer, size_t size, const char *format, ...) {
+    if (!buffer || size == 0) return -1;
+
+    va_list args;
+    va_start(args, format);
+    int result = vsnprintf(buffer, size, format, args);
+    va_end(args);
+
+    return result;
+}
+
+// Path validation function
+static inline int is_safe_path(const char *path) {
+    if (!path) return 0;
+
+    // Check for null bytes and other potentially dangerous characters
+    size_t len = strlen(path);
+    if (len == 0 || len >= MAX_PATH_LENGTH) return 0;
+
+    // Check for directory traversal attempts
+    if (strstr(path, "..") != NULL) return 0;
+
+    // Check for absolute path requirements if needed
+    if (path[0] != 'u' && path[0] != 'm') return 0;
+
+    return 1;
+}
 
 typedef enum {
     SORT_BY_NAME = 0,
     SORT_BY_SIZE = 1
 } SortMode;
 
-// List of temporary folders to clean
 extern const char *TEMP_PATHS[];
 extern const size_t TEMP_PATHS_COUNT;
 
-// Structure for file preview
 typedef struct {
-    char path[512];
+    char path[MAX_PATH_LENGTH];
     unsigned long long size;
 } FileInfo;
 
@@ -47,6 +108,7 @@ extern int cleanRetroArch;
 extern int cleanAdrenaline;
 extern int cleanBrowser;
 extern int cleanSystem;
+extern int cleanOrphanedData;
 
 // Cleanup counter functionality
 int loadCleanupCounter();
@@ -61,6 +123,14 @@ void resetDeletedFilesCount();
 void deleteRecursive(const char *path);
 void forceDeleteDumpFiles();
 void aggressiveDumpCleanup();
+
+// Orphaned data cleanup functions
+void getInstalledAppsList(char ***apps, int *count);
+int isAppInstalled(const char *title_id);
+void findOrphanedDataDirectories();
+void findOrphanedLicenseDirectories();
+void findOrphanedPatchDirectories();
+unsigned long long calculateOrphanedDataSize();
 
 // Preview functions
 FileList* createFileList();

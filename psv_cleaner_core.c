@@ -24,6 +24,7 @@ int cleanRetroArch = 1;
 int cleanAdrenaline = 1;
 int cleanBrowser = 1;
 int cleanSystem = 1;
+int cleanOrphanedData = 0;
 
 #define CACHE_FILE_PATH "ux0:data/PSV_Cleaner/scan_cache.bin"
 #define CACHE_VERSION 1
@@ -225,11 +226,11 @@ const char* lang_profile_options[MAX_LANGUAGES][6] = {
 const char* lang_ui_text[MAX_LANGUAGES][20] = {
     {
         "System Status:", "Ready for Cleanup",
-        "Controls:", "■ Change Profile", "X Preview & Clean", "△ Advanced Options", "O Exit App",
+        "Controls:", "Change Profile", "Preview & Clean", "Advanced Options", "Exit App",
         "Space to free:", "Space Freed:", "Files Deleted:",
         "D-Pad: Navigate | X: Select Profile | O: Exit",
         "Cleanup #", "No temporary files found!",
-        "System Ready", "Version 1.05"
+        "System Ready", "Version 1.09"
     }
 };
 
@@ -390,7 +391,7 @@ int hasDirectoryChanged(const char* path, SceDateTime* cachedTime) {
 CacheEntry createCacheEntry(const char* path) {
     CacheEntry entry;
     memset(&entry, 0, sizeof(CacheEntry));
-    strncpy(entry.path, path, sizeof(entry.path) - 1);
+    safe_strncpy(entry.path, path, sizeof(entry.path));
 
     if (getDirectoryModTime(path, &entry.lastModified)) {
         entry.totalSize = calculateTempSizeRecursive(path);
@@ -454,8 +455,8 @@ void aggressiveDumpCleanup() {
                 int len = strlen(filename);
                 if ((len > 8 && strcmp(filename + len - 8, ".psp2dmp") == 0) ||
                     (len > 12 && strcmp(filename + len - 12, ".psp2dmp.tmp") == 0)) {
-                    char fullPath[512];
-                    snprintf(fullPath, sizeof(fullPath), "%s%s", searchPaths[path], filename);
+                    char fullPath[MAX_PATH_LENGTH];
+                    safe_snprintf(fullPath, sizeof(fullPath), "%s%s", searchPaths[path], filename);
 
                     for (int attempt = 0; attempt < 5; attempt++) {
                         if (sceIoRemove(fullPath) >= 0) {
@@ -578,19 +579,19 @@ unsigned long long calculateTempSize() {
     }
 
     for(size_t i = 0; i < TEMP_PATHS_COUNT; i++){
-        // Skip picture paths if exclusion is enabled
+        
         if (excludePictureFolder && strncmp(TEMP_PATHS[i], "ux0:picture/", 12) == 0) {
             continue;
         }
-        // Skip VPK paths if exclusion is enabled
+        
         if (excludeVpkFiles && strstr(TEMP_PATHS[i], ".vpk") != NULL) {
             continue;
         }
-        // Skip VitaDB paths if exclusion is enabled
+        
         if (excludeVitaDBCache && strncmp(TEMP_PATHS[i], "ux0:data/VitaDB/", 17) == 0) {
             continue;
         }
-        // Selective app cleaning
+        
         if (!cleanVitaShell && strstr(TEMP_PATHS[i], "VitaShell/")) {
             continue;
         }
@@ -603,7 +604,7 @@ unsigned long long calculateTempSize() {
         if (!cleanBrowser && (strstr(TEMP_PATHS[i], "browser/") || strstr(TEMP_PATHS[i], "webkit/"))) {
             continue;
         }
-        // System paths are always cleaned if cleanSystem is enabled
+        
         if (!cleanSystem && (strstr(TEMP_PATHS[i], "ux0:temp/") || strstr(TEMP_PATHS[i], "ux0:cache/") || strstr(TEMP_PATHS[i], "ux0:log/") ||
             strstr(TEMP_PATHS[i], "AutoPlugin/") || strstr(TEMP_PATHS[i], "AUTOPLUGIN2/"))) {
             continue;
@@ -633,6 +634,9 @@ unsigned long long calculateTempSize() {
         free(cache);
     }
 
+    
+    total += calculateOrphanedDataSize();
+
     return total;
 }
 
@@ -650,19 +654,19 @@ unsigned long long cleanTemporaryFiles() {
     }
 
     for(size_t i=0;i<TEMP_PATHS_COUNT;i++){
-        // Skip picture paths if exclusion is enabled
+        
         if (excludePictureFolder && strncmp(TEMP_PATHS[i], "ux0:picture/", 12) == 0) {
             continue;
         }
-        // Skip VPK paths if exclusion is enabled
+        
         if (excludeVpkFiles && strstr(TEMP_PATHS[i], ".vpk") != NULL) {
             continue;
         }
-        // Skip VitaDB paths if exclusion is enabled
+        
         if (excludeVitaDBCache && strncmp(TEMP_PATHS[i], "ux0:data/VitaDB/", 17) == 0) {
             continue;
         }
-        // Selective app cleaning
+        
         if (!cleanVitaShell && strstr(TEMP_PATHS[i], "VitaShell/")) {
             continue;
         }
@@ -675,7 +679,7 @@ unsigned long long cleanTemporaryFiles() {
         if (!cleanBrowser && (strstr(TEMP_PATHS[i], "browser/") || strstr(TEMP_PATHS[i], "webkit/"))) {
             continue;
         }
-        // System paths are always cleaned if cleanSystem is enabled
+        
         if (!cleanSystem && (strstr(TEMP_PATHS[i], "ux0:temp/") || strstr(TEMP_PATHS[i], "ux0:cache/") || strstr(TEMP_PATHS[i], "ux0:log/") ||
             strstr(TEMP_PATHS[i], "AutoPlugin/") || strstr(TEMP_PATHS[i], "AUTOPLUGIN2/"))) {
             continue;
@@ -688,6 +692,11 @@ unsigned long long cleanTemporaryFiles() {
 
     if (!excludeVpkFiles) {
         cleanupVpkFiles();
+    }
+
+    // Clean orphaned data directories if enabled
+    if (cleanOrphanedData) {
+        findOrphanedDataDirectories();
     }
 
     sceIoRemove(CACHE_FILE_PATH);
@@ -732,8 +741,7 @@ void addFileToList(FileList *list, const char *path, unsigned long long size) {
         list->files = newFiles;
     }
 
-    strncpy(list->files[list->count].path, path, sizeof(list->files[list->count].path) - 1);
-    list->files[list->count].path[sizeof(list->files[list->count].path) - 1] = '\0';
+    safe_strncpy(list->files[list->count].path, path, sizeof(list->files[list->count].path));
     list->files[list->count].size = size;
     list->totalSize += size;
     list->count++;
@@ -848,6 +856,245 @@ int deleteSingleFileFromList(FileList *list, int index) {
     }
 
     return 0;
+}
+
+// Orphaned data cleanup functions
+void getInstalledAppsList(char ***apps, int *count) {
+    *count = 0;
+    *apps = NULL;
+
+    SceUID dfd = sceIoDopen("ux0:app/");
+    if (dfd < 0) return;
+
+    SceIoDirent dir;
+    memset(&dir, 0, sizeof(SceIoDirent));
+
+    while (sceIoDread(dfd, &dir) > 0) {
+        if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+
+        if (strlen(dir.d_name) != 9) continue; 
+
+        (*count)++;
+        *apps = (char **)realloc(*apps, *count * sizeof(char *));
+        (*apps)[*count - 1] = strdup(dir.d_name);
+    }
+
+    sceIoDclose(dfd);
+}
+
+int isAppInstalled(const char *title_id) {
+    if (!title_id || !is_safe_path(title_id) || strlen(title_id) != 9) {
+        return 0;
+    }
+
+    char path[MAX_PATH_LENGTH];
+    safe_snprintf(path, sizeof(path), "ux0:app/%s", title_id);
+    SceIoStat stat;
+    return sceIoGetstat(path, &stat) >= 0;
+}
+
+void findOrphanedDataDirectories() {
+    const char *dataRoots[] = {"ux0:data/"};
+    const int dataRootsCount = 1;
+
+    for (int root = 0; root < dataRootsCount; root++) {
+        SceUID dfd = sceIoDopen(dataRoots[root]);
+        if (dfd < 0) continue;
+
+        SceIoDirent dir;
+        memset(&dir, 0, sizeof(SceIoDirent));
+
+        while (sceIoDread(dfd, &dir) > 0) {
+            if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+
+            char dirName[MAX_FILENAME_LENGTH];
+            safe_strncpy(dirName, dir.d_name, sizeof(dirName));
+
+            // Skip known system directories that are not app data
+            if (strcmp(dirName, "Adrenaline") == 0 ||
+                strcmp(dirName, "AutoPlugin") == 0 ||
+                strcmp(dirName, "AUTOPLUGIN2") == 0 ||
+                strcmp(dirName, "browser") == 0 ||
+                strcmp(dirName, "RetroFlow") == 0 ||
+                strcmp(dirName, "VitaDB") == 0 ||
+                strcmp(dirName, "henkaku") == 0 ||
+                strcmp(dirName, "moonlight") == 0 ||
+                strcmp(dirName, "PSP2SHELL") == 0 ||
+                strcmp(dirName, "PSVshell") == 0 ||
+                strcmp(dirName, "RetroArch") == 0 ||
+                strcmp(dirName, "VitaShell") == 0 ||
+                strcmp(dirName, "savemgr") == 0 ||
+                strcmp(dirName, "vitacheat") == 0 ||
+                strcmp(dirName, "rinCheat") == 0 ||
+                strcmp(dirName, "webkit") == 0 ||
+                strcmp(dirName, "net") == 0 ||
+                strcmp(dirName, "pkg") == 0 ||
+                strcmp(dirName, "PSV_Cleaner") == 0 ||
+                strcmp(dirName, "logs") == 0 ||
+                strcmp(dirName, "cache") == 0) {
+                continue;
+            }
+
+            if (strlen(dirName) == 9 && !isAppInstalled(dirName)) {
+                char fullPath[512];
+                snprintf(fullPath, sizeof(fullPath), "%s%s", dataRoots[root], dirName);
+
+                SceIoStat stat;
+                if (sceIoGetstat(fullPath, &stat) >= 0) {
+                    SceDateTime now, modTime;
+                    getCurrentTime(&now);
+                    modTime = stat.st_mtime;
+
+                    SceRtcTick nowTicks, modTicks;
+                    sceRtcGetTick(&now, &nowTicks);
+                    sceRtcGetTick(&modTime, &modTicks);
+
+
+                    SceRtcTick thresholdTicks;
+                    sceRtcTickAddDays(&thresholdTicks, &modTicks, 30);
+
+                    if (sceRtcCompareTick(&nowTicks, &thresholdTicks) >= 0) {
+                        deleteRecursive(fullPath);
+                    }
+                }
+            }
+        }
+        sceIoDclose(dfd);
+    }
+}
+
+unsigned long long calculateOrphanedDataSize() {
+    unsigned long long total = 0;
+    if (!cleanOrphanedData) return 0;
+
+    const char *dataRoots[] = {"ux0:data/"};
+    const int dataRootsCount = 1;
+
+    for (int root = 0; root < dataRootsCount; root++) {
+        SceUID dfd = sceIoDopen(dataRoots[root]);
+        if (dfd < 0) continue;
+
+        SceIoDirent dir;
+        memset(&dir, 0, sizeof(SceIoDirent));
+
+        while (sceIoDread(dfd, &dir) > 0) {
+            if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+
+            char dirName[MAX_FILENAME_LENGTH];
+            safe_strncpy(dirName, dir.d_name, sizeof(dirName));
+
+            if (strcmp(dirName, "Adrenaline") == 0 ||
+                strcmp(dirName, "AutoPlugin") == 0 ||
+                strcmp(dirName, "AUTOPLUGIN2") == 0 ||
+                strcmp(dirName, "browser") == 0 ||
+                strcmp(dirName, "RetroFlow") == 0 ||
+                strcmp(dirName, "VitaDB") == 0 ||
+                strcmp(dirName, "henkaku") == 0 ||
+                strcmp(dirName, "moonlight") == 0 ||
+                strcmp(dirName, "PSP2SHELL") == 0 ||
+                strcmp(dirName, "PSVshell") == 0 ||
+                strcmp(dirName, "RetroArch") == 0 ||
+                strcmp(dirName, "VitaShell") == 0 ||
+                strcmp(dirName, "savemgr") == 0 ||
+                strcmp(dirName, "vitacheat") == 0 ||
+                strcmp(dirName, "rinCheat") == 0 ||
+                strcmp(dirName, "webkit") == 0 ||
+                strcmp(dirName, "net") == 0 ||
+                strcmp(dirName, "pkg") == 0 ||
+                strcmp(dirName, "PSV_Cleaner") == 0 ||
+                strcmp(dirName, "logs") == 0 ||
+                strcmp(dirName, "cache") == 0) {
+                continue;
+            }
+
+            if (strlen(dirName) == 9 && !isAppInstalled(dirName)) {
+                char fullPath[MAX_PATH_LENGTH];
+                safe_snprintf(fullPath, sizeof(fullPath), "%s%s", dataRoots[root], dirName);
+                total += calculateTempSizeRecursive(fullPath);
+            }
+        }
+        sceIoDclose(dfd);
+    }
+
+    return total;
+}
+
+void findOrphanedLicenseDirectories() {
+    SceUID dfd = sceIoDopen("ux0:license/");
+    if (dfd < 0) return;
+
+    SceIoDirent dir;
+    memset(&dir, 0, sizeof(SceIoDirent));
+
+    while (sceIoDread(dfd, &dir) > 0) {
+        if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+
+        char dirName[MAX_FILENAME_LENGTH];
+        safe_strncpy(dirName, dir.d_name, sizeof(dirName));
+
+        if (strlen(dirName) == 16 && !isAppInstalled(dirName + 7)) {
+            char fullPath[MAX_PATH_LENGTH];
+            safe_snprintf(fullPath, sizeof(fullPath), "ux0:license/%s", dirName);
+
+            SceIoStat stat;
+            if (sceIoGetstat(fullPath, &stat) >= 0) {
+                SceDateTime now, modTime;
+                getCurrentTime(&now);
+                modTime = stat.st_mtime;
+
+                SceRtcTick nowTicks, modTicks;
+                sceRtcGetTick(&now, &nowTicks);
+                sceRtcGetTick(&modTime, &modTicks);
+
+                SceRtcTick thresholdTicks;
+                sceRtcTickAddDays(&thresholdTicks, &modTicks, 30);
+
+                if (sceRtcCompareTick(&nowTicks, &thresholdTicks) >= 0) {
+                    deleteRecursive(fullPath);
+                }
+            }
+        }
+    }
+    sceIoDclose(dfd);
+}
+
+void findOrphanedPatchDirectories() {
+    SceUID dfd = sceIoDopen("ux0:patch/");
+    if (dfd < 0) return;
+
+    SceIoDirent dir;
+    memset(&dir, 0, sizeof(SceIoDirent));
+
+    while (sceIoDread(dfd, &dir) > 0) {
+        if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+
+        char dirName[MAX_FILENAME_LENGTH];
+        safe_strncpy(dirName, dir.d_name, sizeof(dirName));
+
+        if (strlen(dirName) == 9 && !isAppInstalled(dirName)) {
+            char fullPath[MAX_PATH_LENGTH];
+            safe_snprintf(fullPath, sizeof(fullPath), "ux0:patch/%s", dirName);
+
+            SceIoStat stat;
+            if (sceIoGetstat(fullPath, &stat) >= 0) {
+                SceDateTime now, modTime;
+                getCurrentTime(&now);
+                modTime = stat.st_mtime;
+
+                SceRtcTick nowTicks, modTicks;
+                sceRtcGetTick(&now, &nowTicks);
+                sceRtcGetTick(&modTime, &modTicks);
+
+                SceRtcTick thresholdTicks;
+                sceRtcTickAddDays(&thresholdTicks, &modTicks, 30);
+
+                if (sceRtcCompareTick(&nowTicks, &thresholdTicks) >= 0) {
+                    deleteRecursive(fullPath);
+                }
+            }
+        }
+    }
+    sceIoDclose(dfd);
 }
 
 void scanFilesForPreview(FileList *list) {
