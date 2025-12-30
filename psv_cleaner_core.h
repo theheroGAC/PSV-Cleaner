@@ -90,6 +90,17 @@ typedef struct {
     unsigned long long totalSize;
 } FileList;
 
+typedef struct {
+    char titleId[10];
+    unsigned long long tempSize;
+} AppInfo;
+
+typedef struct {
+    AppInfo *apps;
+    int count;
+    int capacity;
+} AppList;
+
 // Global counter for deleted files
 extern int g_deletedFilesCount;
 
@@ -109,6 +120,7 @@ extern int cleanAdrenaline;
 extern int cleanBrowser;
 extern int cleanSystem;
 extern int cleanOrphanedData;
+extern int cleanAllAppsTempFiles;
 
 // Cleanup counter functionality
 int loadCleanupCounter();
@@ -124,13 +136,22 @@ void deleteRecursive(const char *path);
 void forceDeleteDumpFiles();
 void aggressiveDumpCleanup();
 
-// Orphaned data cleanup functions
 void getInstalledAppsList(char ***apps, int *count);
 int isAppInstalled(const char *title_id);
 void findOrphanedDataDirectories();
 void findOrphanedLicenseDirectories();
 void findOrphanedPatchDirectories();
 unsigned long long calculateOrphanedDataSize();
+
+unsigned long long calculateAllAppsTempFilesSize();
+unsigned long long cleanAllAppsTempFilesData();
+void scanAppTempFilesForPreview(FileList *list, const char *titleId);
+
+AppList* createAppList();
+void freeAppList(AppList *list);
+void populateAppListWithSizes(AppList *list);
+unsigned long long calculateSingleAppTempFilesSize(const char *titleId);
+unsigned long long cleanSingleAppTempFiles(const char *titleId);
 
 // Preview functions
 FileList* createFileList();

@@ -25,6 +25,7 @@ int cleanAdrenaline = 1;
 int cleanBrowser = 1;
 int cleanSystem = 1;
 int cleanOrphanedData = 0;
+int cleanAllAppsTempFiles = 0;
 
 #define CACHE_FILE_PATH "ux0:data/PSV_Cleaner/scan_cache.bin"
 #define CACHE_VERSION 1
@@ -230,7 +231,7 @@ const char* lang_ui_text[MAX_LANGUAGES][20] = {
         "Space to free:", "Space Freed:", "Files Deleted:",
         "D-Pad: Navigate | X: Select Profile | O: Exit",
         "Cleanup #", "No temporary files found!",
-        "System Ready", "Version 1.09"
+        "System Ready", "Version 1.10"
     }
 };
 
@@ -637,6 +638,8 @@ unsigned long long calculateTempSize() {
     
     total += calculateOrphanedDataSize();
 
+    total += calculateAllAppsTempFilesSize();
+
     return total;
 }
 
@@ -694,9 +697,12 @@ unsigned long long cleanTemporaryFiles() {
         cleanupVpkFiles();
     }
 
-    // Clean orphaned data directories if enabled
     if (cleanOrphanedData) {
         findOrphanedDataDirectories();
+    }
+
+    if (cleanAllAppsTempFiles) {
+        cleanAllAppsTempFilesData();
     }
 
     sceIoRemove(CACHE_FILE_PATH);
@@ -1163,4 +1169,431 @@ void scanFilesForPreview(FileList *list) {
             sceIoDclose(vpkDfd);
         }
     }
+
+    if (cleanAllAppsTempFiles) {
+        char **apps = NULL;
+        int appCount = 0;
+        getInstalledAppsList(&apps, &appCount);
+
+        if (apps) {
+            for (int i = 0; i < appCount; i++) {
+                if (isEmergencyStopRequested()) break;
+                scanAppTempFilesForPreview(list, apps[i]);
+                free(apps[i]);
+            }
+            free(apps);
+        }
+    }
+}
+
+static int isTempFile(const char *filename) {
+    if (!filename) return 0;
+
+    int len = strlen(filename);
+    if (len == 0) return 0;
+
+    const char *tempExtensions[] = {".tmp", ".temp", ".log", ".cache", ".bak", ".old", ".swp"};
+    int extCount = sizeof(tempExtensions) / sizeof(tempExtensions[0]);
+
+    for (int i = 0; i < extCount; i++) {
+        int extLen = strlen(tempExtensions[i]);
+        if (len >= extLen && strcasecmp(filename + len - extLen, tempExtensions[i]) == 0) {
+            return 1;
+        }
+    }
+
+    if (strstr(filename, "temp") != NULL || strstr(filename, "tmp") != NULL ||
+        strstr(filename, "cache") != NULL || strstr(filename, "log") != NULL) {
+        return 1;
+    }
+
+    return 0;
+}
+
+void scanAppTempFilesForPreview(FileList *list, const char *titleId) {
+    if (!list || !titleId || strlen(titleId) != 9) return;
+
+    const char *tempDirs[] = {"cache", "temp", "tmp", "logs", "log"};
+    int tempDirCount = sizeof(tempDirs) / sizeof(tempDirs[0]);
+
+    const char *appDirs[] = {
+        "ux0:data/%s",
+        "ux0:patch/%s",
+        "ux0:addcont/%s"
+    };
+    int appDirCount = sizeof(appDirs) / sizeof(appDirs[0]);
+
+    for (int dirIdx = 0; dirIdx < appDirCount; dirIdx++) {
+        char appPath[MAX_PATH_LENGTH];
+        safe_snprintf(appPath, sizeof(appPath), appDirs[dirIdx], titleId);
+
+        SceIoStat stat;
+        if (sceIoGetstat(appPath, &stat) < 0) continue;
+        if (!SCE_S_ISDIR(stat.st_mode)) continue;
+
+        for (int i = 0; i < tempDirCount; i++) {
+            char tempDirPath[MAX_PATH_LENGTH];
+            safe_snprintf(tempDirPath, sizeof(tempDirPath), "%s/%s", appPath, tempDirs[i]);
+            scanPathForPreview(list, tempDirPath);
+        }
+
+        SceUID dfd = sceIoDopen(appPath);
+        if (dfd >= 0) {
+            SceIoDirent dir;
+            memset(&dir, 0, sizeof(SceIoDirent));
+
+            while (sceIoDread(dfd, &dir) > 0) {
+                if (strcmp(dir.d_name, ".") == 0 || strcmp(dir.d_name, "..") == 0) continue;
+
+                int skipDir = 0;
+                for (int i = 0; i < tempDirCount; i++) {
+                    if (strcmp(dir.d_name, tempDirs[i]) == 0) {
+                        skipDir = 1;
+                        break;
+                    }
+                }
+                if (skipDir) continue;
+
+                if (!SCE_S_ISDIR(dir.d_stat.st_mode) && isTempFile(dir.d_name)) {
+                    char fullPath[MAX_PATH_LENGTH];
+                    safe_snprintf(fullPath, sizeof(fullPath), "%s/%s", appPath, dir.d_name);
+                    addFileToList(list, fullPath, dir.d_stat.st_size);
+                }
+            }
+            sceIoDclose(dfd);
+        }
+    }
+}
+
+unsigned long long calculateAllAppsTempFilesSize() {
+    if (!cleanAllAppsTempFiles) return 0;
+
+    unsigned long long total = 0;
+    char **apps = NULL;
+    int appCount = 0;
+    getInstalledAppsList(&apps, &appCount);
+
+    if (!apps) return 0;
+
+    const char *tempDirs[] = {"cache", "temp", "tmp", "logs", "log"};
+    int tempDirCount = sizeof(tempDirs) / sizeof(tempDirs[0]);
+
+    const char *appDirs[] = {
+        "ux0:data/%s",
+        "ux0:patch/%s",
+        "ux0:addcont/%s"
+    };
+    int appDirCount = sizeof(appDirs) / sizeof(appDirs[0]);
+
+    for (int i = 0; i < appCount; i++) {
+        for (int dirIdx = 0; dirIdx < appDirCount; dirIdx++) {
+            char appPath[MAX_PATH_LENGTH];
+            safe_snprintf(appPath, sizeof(appPath), appDirs[dirIdx], apps[i]);
+
+            SceIoStat stat;
+            if (sceIoGetstat(appPath, &stat) < 0) continue;
+            if (!SCE_S_ISDIR(stat.st_mode)) continue;
+
+            for (int j = 0; j < tempDirCount; j++) {
+                char tempDirPath[MAX_PATH_LENGTH];
+                safe_snprintf(tempDirPath, sizeof(tempDirPath), "%s/%s", appPath, tempDirs[j]);
+                total += calculateTempSizeRecursive(tempDirPath);
+            }
+
+            SceUID dfd = sceIoDopen(appPath);
+            if (dfd >= 0) {
+                SceIoDirent dir;
+                memset(&dir, 0, sizeof(SceIoDirent));
+
+                while (sceIoDread(dfd, &dir) > 0) {
+                    if (strcmp(dir.d_name, ".") == 0 || strcmp(dir.d_name, "..") == 0) continue;
+
+                    int skipDir = 0;
+                    for (int j = 0; j < tempDirCount; j++) {
+                        if (strcmp(dir.d_name, tempDirs[j]) == 0) {
+                            skipDir = 1;
+                            break;
+                        }
+                    }
+                    if (skipDir) continue;
+
+                    if (!SCE_S_ISDIR(dir.d_stat.st_mode) && isTempFile(dir.d_name)) {
+                        total += dir.d_stat.st_size;
+                    }
+                }
+                sceIoDclose(dfd);
+            }
+        }
+
+        free(apps[i]);
+    }
+    free(apps);
+
+    return total;
+}
+
+unsigned long long cleanAllAppsTempFilesData() {
+    if (!cleanAllAppsTempFiles) return 0;
+
+    unsigned long long totalCleaned = 0;
+    char **apps = NULL;
+    int appCount = 0;
+    getInstalledAppsList(&apps, &appCount);
+
+    if (!apps) return 0;
+
+    const char *tempDirs[] = {"cache", "temp", "tmp", "logs", "log"};
+    int tempDirCount = sizeof(tempDirs) / sizeof(tempDirs[0]);
+
+    const char *appDirs[] = {
+        "ux0:data/%s",
+        "ux0:patch/%s",
+        "ux0:addcont/%s"
+    };
+    int appDirCount = sizeof(appDirs) / sizeof(appDirs[0]);
+
+    for (int i = 0; i < appCount; i++) {
+        if (isEmergencyStopRequested()) break;
+
+        for (int dirIdx = 0; dirIdx < appDirCount; dirIdx++) {
+            if (isEmergencyStopRequested()) break;
+
+            char appPath[MAX_PATH_LENGTH];
+            safe_snprintf(appPath, sizeof(appPath), appDirs[dirIdx], apps[i]);
+
+            SceIoStat stat;
+            if (sceIoGetstat(appPath, &stat) < 0) continue;
+            if (!SCE_S_ISDIR(stat.st_mode)) continue;
+
+            for (int j = 0; j < tempDirCount; j++) {
+                if (isEmergencyStopRequested()) break;
+
+                char tempDirPath[MAX_PATH_LENGTH];
+                safe_snprintf(tempDirPath, sizeof(tempDirPath), "%s/%s", appPath, tempDirs[j]);
+                
+                unsigned long long before = calculateTempSizeRecursive(tempDirPath);
+                deleteRecursive(tempDirPath);
+                unsigned long long after = calculateTempSizeRecursive(tempDirPath);
+                totalCleaned += (before - after);
+            }
+
+            SceUID dfd = sceIoDopen(appPath);
+            if (dfd >= 0) {
+                SceIoDirent dir;
+                memset(&dir, 0, sizeof(SceIoDirent));
+
+                while (sceIoDread(dfd, &dir) > 0) {
+                    if (isEmergencyStopRequested()) break;
+
+                    if (strcmp(dir.d_name, ".") == 0 || strcmp(dir.d_name, "..") == 0) continue;
+
+                    int skipDir = 0;
+                    for (int j = 0; j < tempDirCount; j++) {
+                        if (strcmp(dir.d_name, tempDirs[j]) == 0) {
+                            skipDir = 1;
+                            break;
+                        }
+                    }
+                    if (skipDir) continue;
+
+                    if (!SCE_S_ISDIR(dir.d_stat.st_mode) && isTempFile(dir.d_name)) {
+                        char fullPath[MAX_PATH_LENGTH];
+                        safe_snprintf(fullPath, sizeof(fullPath), "%s/%s", appPath, dir.d_name);
+                        
+                        if (sceIoRemove(fullPath) >= 0) {
+                            totalCleaned += dir.d_stat.st_size;
+                            g_deletedFilesCount++;
+                        }
+                    }
+                }
+                sceIoDclose(dfd);
+            }
+        }
+
+        free(apps[i]);
+    }
+    free(apps);
+
+    return totalCleaned;
+}
+
+AppList* createAppList() {
+    AppList *list = (AppList*)malloc(sizeof(AppList));
+    if (!list) return NULL;
+
+    list->capacity = 50;
+    list->count = 0;
+    list->apps = (AppInfo*)malloc(sizeof(AppInfo) * list->capacity);
+
+    if (!list->apps) {
+        free(list);
+        return NULL;
+    }
+
+    return list;
+}
+
+void freeAppList(AppList *list) {
+    if (list) {
+        if (list->apps) {
+            free(list->apps);
+        }
+        free(list);
+    }
+}
+
+unsigned long long calculateSingleAppTempFilesSize(const char *titleId) {
+    if (!titleId || strlen(titleId) != 9) return 0;
+
+    unsigned long long total = 0;
+    const char *tempDirs[] = {"cache", "temp", "tmp", "logs", "log"};
+    int tempDirCount = sizeof(tempDirs) / sizeof(tempDirs[0]);
+
+    const char *appDirs[] = {
+        "ux0:data/%s",
+        "ux0:patch/%s",
+        "ux0:addcont/%s"
+    };
+    int appDirCount = sizeof(appDirs) / sizeof(appDirs[0]);
+
+    for (int dirIdx = 0; dirIdx < appDirCount; dirIdx++) {
+        char appPath[MAX_PATH_LENGTH];
+        safe_snprintf(appPath, sizeof(appPath), appDirs[dirIdx], titleId);
+
+        SceIoStat stat;
+        if (sceIoGetstat(appPath, &stat) < 0) continue;
+        if (!SCE_S_ISDIR(stat.st_mode)) continue;
+
+        for (int j = 0; j < tempDirCount; j++) {
+            char tempDirPath[MAX_PATH_LENGTH];
+            safe_snprintf(tempDirPath, sizeof(tempDirPath), "%s/%s", appPath, tempDirs[j]);
+            total += calculateTempSizeRecursive(tempDirPath);
+        }
+
+        SceUID dfd = sceIoDopen(appPath);
+        if (dfd >= 0) {
+            SceIoDirent dir;
+            memset(&dir, 0, sizeof(SceIoDirent));
+
+            while (sceIoDread(dfd, &dir) > 0) {
+                if (strcmp(dir.d_name, ".") == 0 || strcmp(dir.d_name, "..") == 0) continue;
+
+                int skipDir = 0;
+                for (int j = 0; j < tempDirCount; j++) {
+                    if (strcmp(dir.d_name, tempDirs[j]) == 0) {
+                        skipDir = 1;
+                        break;
+                    }
+                }
+                if (skipDir) continue;
+
+                if (!SCE_S_ISDIR(dir.d_stat.st_mode) && isTempFile(dir.d_name)) {
+                    total += dir.d_stat.st_size;
+                }
+            }
+            sceIoDclose(dfd);
+        }
+    }
+
+    return total;
+}
+
+void populateAppListWithSizes(AppList *list) {
+    if (!list) return;
+
+    char **apps = NULL;
+    int appCount = 0;
+    getInstalledAppsList(&apps, &appCount);
+
+    if (!apps) return;
+
+    list->count = 0;
+
+    for (int i = 0; i < appCount; i++) {
+        if (list->count >= list->capacity) {
+            list->capacity *= 2;
+            AppInfo *newApps = (AppInfo*)realloc(list->apps, sizeof(AppInfo) * list->capacity);
+            if (!newApps) break;
+            list->apps = newApps;
+        }
+
+        safe_strncpy(list->apps[list->count].titleId, apps[i], sizeof(list->apps[list->count].titleId));
+        list->apps[list->count].tempSize = calculateSingleAppTempFilesSize(apps[i]);
+        list->count++;
+
+        free(apps[i]);
+    }
+    free(apps);
+}
+
+unsigned long long cleanSingleAppTempFiles(const char *titleId) {
+    if (!titleId || strlen(titleId) != 9) return 0;
+
+    unsigned long long totalCleaned = 0;
+    const char *tempDirs[] = {"cache", "temp", "tmp", "logs", "log"};
+    int tempDirCount = sizeof(tempDirs) / sizeof(tempDirs[0]);
+
+    const char *appDirs[] = {
+        "ux0:data/%s",
+        "ux0:patch/%s",
+        "ux0:addcont/%s"
+    };
+    int appDirCount = sizeof(appDirs) / sizeof(appDirs[0]);
+
+    for (int dirIdx = 0; dirIdx < appDirCount; dirIdx++) {
+        if (isEmergencyStopRequested()) break;
+
+        char appPath[MAX_PATH_LENGTH];
+        safe_snprintf(appPath, sizeof(appPath), appDirs[dirIdx], titleId);
+
+        SceIoStat stat;
+        if (sceIoGetstat(appPath, &stat) < 0) continue;
+        if (!SCE_S_ISDIR(stat.st_mode)) continue;
+
+        for (int j = 0; j < tempDirCount; j++) {
+            if (isEmergencyStopRequested()) break;
+
+            char tempDirPath[MAX_PATH_LENGTH];
+            safe_snprintf(tempDirPath, sizeof(tempDirPath), "%s/%s", appPath, tempDirs[j]);
+            
+            unsigned long long before = calculateTempSizeRecursive(tempDirPath);
+            deleteRecursive(tempDirPath);
+            unsigned long long after = calculateTempSizeRecursive(tempDirPath);
+            totalCleaned += (before - after);
+        }
+
+        SceUID dfd = sceIoDopen(appPath);
+        if (dfd >= 0) {
+            SceIoDirent dir;
+            memset(&dir, 0, sizeof(SceIoDirent));
+
+            while (sceIoDread(dfd, &dir) > 0) {
+                if (isEmergencyStopRequested()) break;
+
+                if (strcmp(dir.d_name, ".") == 0 || strcmp(dir.d_name, "..") == 0) continue;
+
+                int skipDir = 0;
+                for (int j = 0; j < tempDirCount; j++) {
+                    if (strcmp(dir.d_name, tempDirs[j]) == 0) {
+                        skipDir = 1;
+                        break;
+                    }
+                }
+                if (skipDir) continue;
+
+                if (!SCE_S_ISDIR(dir.d_stat.st_mode) && isTempFile(dir.d_name)) {
+                    char fullPath[MAX_PATH_LENGTH];
+                    safe_snprintf(fullPath, sizeof(fullPath), "%s/%s", appPath, dir.d_name);
+                    
+                    if (sceIoRemove(fullPath) >= 0) {
+                        totalCleaned += dir.d_stat.st_size;
+                        g_deletedFilesCount++;
+                    }
+                }
+            }
+            sceIoDclose(dfd);
+        }
+    }
+
+    return totalCleaned;
 }

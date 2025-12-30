@@ -186,8 +186,8 @@ typedef struct {
     int selected;
     int total_options;
     int scrollOffset;
-    char options[13][64];
-    int enabled[13];
+    char options[14][64];
+    int enabled[14];
 } MenuOptions;
 
 
@@ -200,6 +200,13 @@ typedef struct {
     char fileFilter[16];
     unsigned long long totalVisibleSize;
 } PreviewState;
+
+typedef struct {
+    AppList *appList;
+    int scrollOffset;
+    int selectedApp;
+    int showAppList;
+} AppListState;
 
 void drawMainControlBar(vita2d_pgf *font, int selected_profile, int min_profile, int max_profile) {
     vita2d_draw_rectangle(0, 500, 960, 44, RGBA(15, 25, 40, 220));
@@ -272,7 +279,7 @@ typedef enum {
 void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
     menu->selected = 0;
     menu->scrollOffset = 0;
-    menu->total_options = 13;
+    menu->total_options = 14;
 
     strcpy(menu->options[0], "System Temp Files");
     strcpy(menu->options[1], "VitaShell Cache");
@@ -287,6 +294,7 @@ void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
     strcpy(menu->options[10], "Exclude VPK Files");
     strcpy(menu->options[11], "Exclude VitaDB Cache");
     strcpy(menu->options[12], "Clean Orphaned App Data");
+    strcpy(menu->options[13], "Clean All Apps Temp Files");
 
     switch (profile) {
         case PROFILE_QUICK:
@@ -301,7 +309,8 @@ void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
             menu->enabled[8] = 0;
             menu->enabled[9] = 0;
             menu->enabled[10] = 0;
-            menu->enabled[12] = 1; 
+            menu->enabled[12] = 1;
+            menu->enabled[13] = 0; 
             break;
 
         case PROFILE_COMPLETE:
@@ -310,7 +319,8 @@ void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
             }
             menu->enabled[9] = 0; 
             menu->enabled[10] = 0; 
-            menu->enabled[12] = 1; 
+            menu->enabled[12] = 1;
+            menu->enabled[13] = 1; 
             break;
 
         case PROFILE_SELECTIVE:
@@ -318,9 +328,21 @@ void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
                 menu->enabled[i] = 0;
             }
             menu->enabled[7] = 1;
-            menu->enabled[12] = 0; 
+            menu->enabled[12] = 0;
+            menu->enabled[13] = 0; 
             break;
     }
+
+    cleanOrphanedData = menu->enabled[12];
+    cleanAllAppsTempFiles = menu->enabled[13];
+    excludePictureFolder = menu->enabled[9];
+    excludeVpkFiles = menu->enabled[10];
+    excludeVitaDBCache = menu->enabled[11];
+    cleanVitaShell = menu->enabled[1];
+    cleanRetroArch = menu->enabled[3];
+    cleanAdrenaline = menu->enabled[5];
+    cleanBrowser = (menu->enabled[0] || menu->enabled[7]);
+    cleanSystem = menu->enabled[0];
 }
 
 void drawOptionsMenu(vita2d_pgf *font, MenuOptions *menu) {
@@ -509,6 +531,89 @@ void drawPreviewScreen(vita2d_pgf *font, PreviewState *preview) {
     vita2d_draw_rectangle(0, 542, 960, 2, RGBA(0, 150, 255, 255));
 }
 
+void drawAppListScreen(vita2d_pgf *font, AppListState *appState) {
+    vita2d_draw_rectangle(0, 0, 960, 544, RGBA(15, 25, 40, 255));
+
+    vita2d_pgf_draw_text(font, 480 - 120, 40, RGBA(255, 255, 255, 255), 1.8f, "Select App to Clean");
+
+    if (appState->appList && appState->appList->count > 0) {
+        char totalText[128];
+        unsigned long long totalSize = 0;
+        for (int i = 0; i < appState->appList->count; i++) {
+            totalSize += appState->appList->apps[i].tempSize;
+        }
+
+        if (totalSize < (1024 * 1024))
+            snprintf(totalText, sizeof(totalText), "Apps: %d | Total Temp Files: %llu KB",
+                    appState->appList->count, totalSize / 1024);
+        else if (totalSize < (1024ULL * 1024 * 1024))
+            snprintf(totalText, sizeof(totalText), "Apps: %d | Total Temp Files: %.2f MB",
+                    appState->appList->count, totalSize / (1024.0 * 1024));
+        else
+            snprintf(totalText, sizeof(totalText), "Apps: %d | Total Temp Files: %.2f GB",
+                    appState->appList->count, totalSize / (1024.0 * 1024 * 1024));
+
+        vita2d_pgf_draw_text(font, 30, 70, RGBA(100, 255, 100, 255), 1.0f, totalText);
+
+        int maxVisible = 18;
+        int startIdx = appState->scrollOffset;
+        int endIdx = startIdx + maxVisible;
+        if (endIdx > appState->appList->count) endIdx = appState->appList->count;
+
+        for (int i = startIdx; i < endIdx; i++) {
+            int y = 100 + ((i - startIdx) * 22);
+            int color = (i == appState->selectedApp) ? RGBA(255, 255, 100, 255) : RGBA(200, 200, 200, 255);
+
+            if (i == appState->selectedApp) {
+                vita2d_draw_rectangle(20, y - 3, 920, 20, RGBA(50, 100, 150, 100));
+            }
+
+            char titleIdText[16];
+            safe_strncpy(titleIdText, appState->appList->apps[i].titleId, sizeof(titleIdText));
+
+            char sizeText[32];
+            unsigned long long size = appState->appList->apps[i].tempSize;
+            if (size == 0) {
+                strcpy(sizeText, "0 B");
+            } else if (size < 1024) {
+                snprintf(sizeText, sizeof(sizeText), "%llu B", size);
+            } else if (size < (1024 * 1024)) {
+                snprintf(sizeText, sizeof(sizeText), "%llu KB", size / 1024);
+            } else if (size < (1024ULL * 1024 * 1024)) {
+                snprintf(sizeText, sizeof(sizeText), "%.2f MB", size / (1024.0 * 1024));
+            } else {
+                snprintf(sizeText, sizeof(sizeText), "%.2f GB", size / (1024.0 * 1024 * 1024));
+            }
+
+            vita2d_pgf_draw_text(font, 25, y + 12, color, 0.8f, titleIdText);
+            vita2d_pgf_draw_text(font, 850, y + 12, color, 0.8f, sizeText);
+        }
+
+        if (appState->appList->count > maxVisible) {
+            int scrollbarHeight = 395;
+            int scrollbarY = 100;
+            int thumbHeight = (maxVisible * scrollbarHeight) / appState->appList->count;
+            int thumbY = scrollbarY + (appState->scrollOffset * scrollbarHeight) / appState->appList->count;
+
+            vita2d_draw_rectangle(945, scrollbarY, 10, scrollbarHeight, RGBA(40, 40, 40, 255));
+            vita2d_draw_rectangle(945, thumbY, 10, thumbHeight, RGBA(100, 150, 200, 255));
+        }
+    } else {
+        vita2d_pgf_draw_text(font, 480 - 120, 272, RGBA(255, 255, 100, 255), 1.2f, "Scanning apps...");
+    }
+
+    vita2d_draw_rectangle(0, 510, 960, 34, RGBA(20, 30, 50, 220));
+    if (!appState->appList || appState->appList->count == 0) {
+        vita2d_pgf_draw_text(font, 30, 530, RGBA(200, 200, 200, 255), 0.8f, "O: Cancel");
+    } else {
+        vita2d_pgf_draw_text(font, 30, 530, RGBA(200, 200, 200, 255), 0.8f,
+                            "D-Pad: Navigate | X: Clean Selected App | O: Cancel");
+    }
+
+    vita2d_draw_rectangle(0, 0, 960, 2, RGBA(0, 150, 255, 255));
+    vita2d_draw_rectangle(0, 542, 960, 2, RGBA(0, 150, 255, 255));
+}
+
 int main() {
     sceSysmoduleLoadModule(SCE_SYSMODULE_PGF);
     sceSysmoduleLoadModule(SCE_SYSMODULE_APPUTIL);
@@ -550,6 +655,12 @@ int main() {
     preview.sortMode = SORT_BY_NAME;
     strcpy(preview.fileFilter, "");
     preview.totalVisibleSize = 0;
+
+    AppListState appState;
+    appState.appList = NULL;
+    appState.scrollOffset = 0;
+    appState.selectedApp = 0;
+    appState.showAppList = 0;
 
     int showMenu = 0;
     int showPreview = 0;
@@ -624,6 +735,8 @@ int main() {
             drawMainControlBar(font, selectedProfile, PROFILE_QUICK, PROFILE_SELECTIVE);
         } else if (showDeleteConfirmation) {
             drawDeleteConfirmation(font, &preview);
+        } else if (appState.showAppList) {
+            drawAppListScreen(font, &appState);
         } else if (showPreview) {
             drawPreviewScreen(font, &preview);
         } else if (showMenu) {
@@ -669,14 +782,14 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
             vita2d_draw_rectangle(0, 470, 960, 74, RGBA(15, 25, 40, 200));
             vita2d_draw_rectangle(0, 470, 960, 2, RGBA(0, 150, 255, 255));
 
-            vita2d_pgf_draw_text(font, 30, 495, RGBA(150, 200, 255, 255), 0.9f, "Version 1.09");
+            vita2d_pgf_draw_text(font, 30, 495, RGBA(150, 200, 255, 255), 0.9f, "Version 1.10");
 
             char statsText[128];
             snprintf(statsText, sizeof(statsText), "Ready to clean temporary files and optimize your PS Vita");
             vita2d_pgf_draw_text(font, 30, 520, RGBA(180, 180, 180, 255), 0.85f, statsText);
 
-            vita2d_pgf_draw_text(font, 600, 495, RGBA(255, 255, 150, 255), 0.85f, "Tip: Use Preview to see");
-            vita2d_pgf_draw_text(font, 600, 520, RGBA(255, 255, 150, 255), 0.85f, "files before cleaning");
+            vita2d_pgf_draw_text(font, 600, 495, RGBA(255, 255, 150, 255), 0.85f, "SELECT: App List | X: Preview");
+            vita2d_pgf_draw_text(font, 600, 520, RGBA(255, 255, 150, 255), 0.85f, "Clean single app temp files");
         }
 
         vita2d_draw_rectangle(0, 0, 960, 2, RGBA(0, 150, 255, 255));
@@ -701,7 +814,6 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
             if (pad.buttons & SCE_CTRL_CROSS) {
                 showProfileSelect = 0;
 
-                // Skip menu for Complete Clean and go directly to preview
                 if (selectedProfile == PROFILE_COMPLETE) {
                     showPreview = 1;
                     preview.scrollOffset = 0;
@@ -744,6 +856,94 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
             }
             if (pad.buttons & SCE_CTRL_CIRCLE) {
                 showDeleteConfirmation = 0;
+                sceKernelDelayThread(200 * 1000);
+            }
+        } else if (appState.showAppList) {
+            if (pad.buttons & SCE_CTRL_UP) {
+                if (appState.selectedApp > 0) {
+                    appState.selectedApp--;
+                    if (appState.selectedApp < appState.scrollOffset) {
+                        appState.scrollOffset = appState.selectedApp;
+                    }
+                }
+                sceKernelDelayThread(100 * 1000);
+            }
+            if (pad.buttons & SCE_CTRL_DOWN) {
+                if (appState.appList && appState.selectedApp < appState.appList->count - 1) {
+                    appState.selectedApp++;
+                    if (appState.selectedApp >= appState.scrollOffset + 18) {
+                        appState.scrollOffset = appState.selectedApp - 17;
+                    }
+                }
+                sceKernelDelayThread(100 * 1000);
+            }
+            if (pad.buttons & SCE_CTRL_CROSS) {
+                if (appState.appList && appState.appList->count > 0 && 
+                    appState.selectedApp >= 0 && appState.selectedApp < appState.appList->count) {
+                    
+                    appState.showAppList = 0;
+                    startOperation();
+
+                    unsigned long long spaceFreed = cleanSingleAppTempFiles(
+                        appState.appList->apps[appState.selectedApp].titleId);
+
+                    endOperation();
+
+                    int cleanupCount = loadCleanupCounter() + 1;
+                    saveCleanupCounter(cleanupCount);
+
+                    int filesDeleted = getDeletedFilesCount();
+                    spaceBefore = calculateTempSize();
+
+                    vita2d_start_drawing();
+                    vita2d_clear_screen();
+                    vita2d_draw_rectangle(0, 0, 960, 544, RGBA(15, 40, 25, 255));
+
+                    vita2d_pgf_draw_text(font, 480 - 120, 78, RGBA(0, 0, 0, 200), 1.9f, "APP CLEANED!");
+                    vita2d_pgf_draw_text(font, 480 - 122, 75, RGBA(100, 255, 100, 255), 1.9f, "APP CLEANED!");
+
+                    char titleText[64];
+                    safe_snprintf(titleText, sizeof(titleText), "App: %s", 
+                        appState.appList->apps[appState.selectedApp].titleId);
+                    vita2d_pgf_draw_text(font, 480 - 100, 200, RGBA(255, 255, 150, 255), 1.1f, titleText);
+
+                    char spaceText[128];
+                    if (spaceFreed < (1024 * 1024))
+                        snprintf(spaceText, sizeof(spaceText), "Space Freed: %llu KB", spaceFreed / 1024);
+                    else if (spaceFreed < (1024ULL * 1024 * 1024))
+                        snprintf(spaceText, sizeof(spaceText), "Space Freed: %.2f MB", spaceFreed / (1024.0 * 1024));
+                    else
+                        snprintf(spaceText, sizeof(spaceText), "Space Freed: %.2f GB", spaceFreed / (1024.0 * 1024 * 1024));
+
+                    vita2d_draw_rectangle(360, 250, 240, 40, RGBA(30, 80, 120, 180));
+                    vita2d_draw_rectangle(360, 250, 240, 3, RGBA(100, 200, 255, 255));
+                    vita2d_draw_rectangle(360, 287, 240, 3, RGBA(100, 200, 255, 255));
+                    vita2d_pgf_draw_text(font, 480 - 105, 275, RGBA(255, 255, 255, 255), 1.1f, spaceText);
+
+                    char filesText[64];
+                    snprintf(filesText, sizeof(filesText), "Files Deleted: %d", filesDeleted);
+                    vita2d_draw_rectangle(360, 300, 240, 40, RGBA(30, 80, 120, 180));
+                    vita2d_draw_rectangle(360, 300, 240, 3, RGBA(100, 200, 255, 255));
+                    vita2d_draw_rectangle(360, 337, 240, 3, RGBA(100, 200, 255, 255));
+                    vita2d_pgf_draw_text(font, 480 - 105, 325, RGBA(255, 255, 255, 255), 1.1f, filesText);
+
+                    vita2d_pgf_draw_text(font, 480 - 100, 400, RGBA(200, 255, 200, 255), 0.9f, "Returning to app list...");
+
+                    vita2d_end_drawing();
+                    vita2d_swap_buffers();
+                    sceKernelDelayThread(2 * 1000 * 1000);
+
+                    populateAppListWithSizes(appState.appList);
+                    appState.showAppList = 1;
+                    sceKernelDelayThread(200 * 1000);
+                }
+            }
+            if (pad.buttons & SCE_CTRL_CIRCLE) {
+                appState.showAppList = 0;
+                if (appState.appList) {
+                    freeAppList(appState.appList);
+                    appState.appList = NULL;
+                }
                 sceKernelDelayThread(200 * 1000);
             }
         } else if (showPreview) {
@@ -991,6 +1191,10 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
                     for (int i = 0; i < 7; i++) {
                         menu.enabled[i] = 1;
                     }
+                    cleanVitaShell = menu.enabled[1];
+                    cleanRetroArch = menu.enabled[3];
+                    cleanAdrenaline = menu.enabled[5];
+                    cleanSystem = menu.enabled[0];
                 } else if (menu.selected == 9) {
                     menu.enabled[menu.selected] = !menu.enabled[menu.selected];
                     excludePictureFolder = menu.enabled[menu.selected];
@@ -1000,8 +1204,18 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
                 } else if (menu.selected == 11) {
                     menu.enabled[menu.selected] = !menu.enabled[menu.selected];
                     excludeVitaDBCache = menu.enabled[menu.selected];
+                } else if (menu.selected == 12) {
+                    menu.enabled[menu.selected] = !menu.enabled[menu.selected];
+                    cleanOrphanedData = menu.enabled[menu.selected];
+                } else if (menu.selected == 13) {
+                    menu.enabled[menu.selected] = !menu.enabled[menu.selected];
+                    cleanAllAppsTempFiles = menu.enabled[menu.selected];
                 } else {
                     menu.enabled[menu.selected] = !menu.enabled[menu.selected];
+                    if (menu.selected == 1) cleanVitaShell = menu.enabled[1];
+                    else if (menu.selected == 3) cleanRetroArch = menu.enabled[3];
+                    else if (menu.selected == 5) cleanAdrenaline = menu.enabled[5];
+                    else if (menu.selected == 0) cleanSystem = menu.enabled[0];
                 }
                 sceKernelDelayThread(200 * 1000);
             }
@@ -1053,6 +1267,28 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
                 showMenu = 1;
                 sceKernelDelayThread(200 * 1000);
             }
+            if (pad.buttons & SCE_CTRL_SELECT) {
+                appState.showAppList = 1;
+                appState.scrollOffset = 0;
+                appState.selectedApp = 0;
+
+                if (!appState.appList) {
+                    appState.appList = createAppList();
+                }
+
+                vita2d_start_drawing();
+                vita2d_clear_screen();
+                vita2d_draw_rectangle(0, 0, 960, 544, RGBA(15, 25, 40, 255));
+                vita2d_pgf_draw_text(font, 480 - 120, 272, RGBA(255, 255, 100, 255), 1.3f, "Scanning apps...");
+                vita2d_end_drawing();
+                vita2d_swap_buffers();
+
+                if (appState.appList) {
+                    populateAppListWithSizes(appState.appList);
+                }
+
+                sceKernelDelayThread(200 * 1000);
+            }
             if (pad.buttons & SCE_CTRL_CROSS) {
                 showPreview = 1;
                 preview.scrollOffset = 0;
@@ -1084,6 +1320,9 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
 
     if (preview.fileList) {
         freeFileList(preview.fileList);
+    }
+    if (appState.appList) {
+        freeAppList(appState.appList);
     }
 
     vita2d_free_pgf(font);
