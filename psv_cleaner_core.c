@@ -13,6 +13,11 @@ int g_deletedFilesCount = 0;
 int g_emergencyStop = 0;
 int g_operationInProgress = 0;
 
+unsigned long long g_cachedSpaceSize = 0;
+int g_spaceCalculationNeeded = 1;
+int g_lastCalculationFrame = 0;
+#define CALCULATION_INTERVAL_FRAMES 60 
+
 // Exclusion settings
 int excludePictureFolder = 0;
 int excludeVpkFiles = 0;
@@ -563,6 +568,27 @@ unsigned long long calculateTempSizeRecursive(const char *path) {
     }
 
     return total;
+}
+
+unsigned long long calculateTempSizeOptimized() {
+    if (g_spaceCalculationNeeded) {
+        g_cachedSpaceSize = calculateTempSize();
+        g_spaceCalculationNeeded = 0;
+    }
+    return g_cachedSpaceSize;
+}
+
+void invalidateSpaceCache() {
+    g_spaceCalculationNeeded = 1;
+}
+
+void updateSpaceCacheIfNeeded(int currentFrame) {
+    if (g_spaceCalculationNeeded || 
+        (currentFrame - g_lastCalculationFrame) > CALCULATION_INTERVAL_FRAMES) {
+        g_cachedSpaceSize = calculateTempSize();
+        g_spaceCalculationNeeded = 0;
+        g_lastCalculationFrame = currentFrame;
+    }
 }
 
 unsigned long long calculateTempSize() {

@@ -634,7 +634,12 @@ int main() {
 
     detectSystemLanguage();
 
-    unsigned long long spaceBefore = calculateTempSize();
+    // Initialize space cache
+    g_cachedSpaceSize = 0;
+    g_spaceCalculationNeeded = 1;
+    g_lastCalculationFrame = 0;
+    
+    unsigned long long spaceBefore = calculateTempSizeOptimized();
     char freeText[128];
     if (spaceBefore == 0) {
         strcpy(freeText, "Space to free: 0 KB");
@@ -668,11 +673,15 @@ int main() {
     int showProfileSelect = 1;
     CleaningProfile selectedProfile = PROFILE_COMPLETE;
     int running = 1;
+    int currentFrame = 0;
+    
     while (running) {
         sceCtrlPeekBufferPositive(0, &pad, 1);
+        currentFrame++;
 
         if (!showMenu && !showPreview) {
-            unsigned long long currentSpace = calculateTempSize();
+            updateSpaceCacheIfNeeded(currentFrame);
+            unsigned long long currentSpace = g_cachedSpaceSize;
             if (currentSpace != spaceBefore || spaceBefore == 0) {
                 spaceBefore = currentSpace;
                 if (spaceBefore == 0) {
@@ -686,6 +695,7 @@ int main() {
             }
         }
 
+        // Safe rendering with fallback
         vita2d_start_drawing();
         vita2d_clear_screen();
 
@@ -782,11 +792,9 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
             vita2d_draw_rectangle(0, 470, 960, 74, RGBA(15, 25, 40, 200));
             vita2d_draw_rectangle(0, 470, 960, 2, RGBA(0, 150, 255, 255));
 
-            vita2d_pgf_draw_text(font, 30, 495, RGBA(150, 200, 255, 255), 0.9f, "Version 1.10");
+            vita2d_pgf_draw_text(font, 30, 495, RGBA(150, 200, 255, 255), 0.9f, "Version 1.11");
 
-            char statsText[128];
-            snprintf(statsText, sizeof(statsText), "Ready to clean temporary files and optimize your PS Vita");
-            vita2d_pgf_draw_text(font, 30, 520, RGBA(180, 180, 180, 255), 0.85f, statsText);
+            vita2d_pgf_draw_text(font, 30, 520, RGBA(180, 180, 180, 255), 0.85f, "Ready to clean temporary files and optimize your PS Vita");
 
             vita2d_pgf_draw_text(font, 600, 495, RGBA(255, 255, 150, 255), 0.85f, "SELECT: App List | X: Preview");
             vita2d_pgf_draw_text(font, 600, 520, RGBA(255, 255, 150, 255), 0.85f, "Clean single app temp files");
@@ -1195,27 +1203,34 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
                     cleanRetroArch = menu.enabled[3];
                     cleanAdrenaline = menu.enabled[5];
                     cleanSystem = menu.enabled[0];
+                    invalidateSpaceCache(); // Invalidate cache when settings change
                 } else if (menu.selected == 9) {
                     menu.enabled[menu.selected] = !menu.enabled[menu.selected];
                     excludePictureFolder = menu.enabled[menu.selected];
+                    invalidateSpaceCache(); // Invalidate cache when settings change
                 } else if (menu.selected == 10) {
                     menu.enabled[menu.selected] = !menu.enabled[menu.selected];
                     excludeVpkFiles = menu.enabled[menu.selected];
+                    invalidateSpaceCache(); // Invalidate cache when settings change
                 } else if (menu.selected == 11) {
                     menu.enabled[menu.selected] = !menu.enabled[menu.selected];
                     excludeVitaDBCache = menu.enabled[menu.selected];
+                    invalidateSpaceCache(); // Invalidate cache when settings change
                 } else if (menu.selected == 12) {
                     menu.enabled[menu.selected] = !menu.enabled[menu.selected];
                     cleanOrphanedData = menu.enabled[menu.selected];
+                    invalidateSpaceCache(); // Invalidate cache when settings change
                 } else if (menu.selected == 13) {
                     menu.enabled[menu.selected] = !menu.enabled[menu.selected];
                     cleanAllAppsTempFiles = menu.enabled[menu.selected];
+                    invalidateSpaceCache(); // Invalidate cache when settings change
                 } else {
                     menu.enabled[menu.selected] = !menu.enabled[menu.selected];
                     if (menu.selected == 1) cleanVitaShell = menu.enabled[1];
                     else if (menu.selected == 3) cleanRetroArch = menu.enabled[3];
                     else if (menu.selected == 5) cleanAdrenaline = menu.enabled[5];
                     else if (menu.selected == 0) cleanSystem = menu.enabled[0];
+                    invalidateSpaceCache(); // Invalidate cache when settings change
                 }
                 sceKernelDelayThread(200 * 1000);
             }

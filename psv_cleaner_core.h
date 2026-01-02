@@ -16,7 +16,6 @@
 #define MAX_FILENAME_LENGTH 256
 #define MAX_FILE_FILTER_LENGTH 32
 
-// Safe string functions to prevent buffer overflows
 #define safe_strncpy(dest, src, size) do { \
     if (size > 0) { \
         dest[0] = '\0'; \
@@ -41,7 +40,6 @@
     } \
 } while(0)
 
-// Safe sprintf wrapper
 static inline int safe_snprintf(char *buffer, size_t size, const char *format, ...) {
     if (!buffer || size == 0) return -1;
 
@@ -53,18 +51,14 @@ static inline int safe_snprintf(char *buffer, size_t size, const char *format, .
     return result;
 }
 
-// Path validation function
 static inline int is_safe_path(const char *path) {
     if (!path) return 0;
 
-    // Check for null bytes and other potentially dangerous characters
     size_t len = strlen(path);
     if (len == 0 || len >= MAX_PATH_LENGTH) return 0;
 
-    // Check for directory traversal attempts
     if (strstr(path, "..") != NULL) return 0;
 
-    // Check for absolute path requirements if needed
     if (path[0] != 'u' && path[0] != 'm') return 0;
 
     return 1;
@@ -108,6 +102,11 @@ extern int g_deletedFilesCount;
 extern int g_emergencyStop;
 extern int g_operationInProgress;
 
+// Performance optimization for main screen
+extern unsigned long long g_cachedSpaceSize;
+extern int g_spaceCalculationNeeded;
+extern int g_lastCalculationFrame;
+
 // Exclusion settings
 extern int excludePictureFolder;
 extern int excludeVpkFiles;
@@ -128,8 +127,11 @@ void saveCleanupCounter(int count);
 
 // Function declarations
 unsigned long long calculateTempSize();
+unsigned long long calculateTempSizeOptimized();
 unsigned long long calculateTempSizeRecursive(const char *path);
 unsigned long long cleanTemporaryFiles();
+void invalidateSpaceCache();
+void updateSpaceCacheIfNeeded(int currentFrame);
 int getDeletedFilesCount();
 void resetDeletedFilesCount();
 void deleteRecursive(const char *path);
