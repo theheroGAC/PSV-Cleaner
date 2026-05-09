@@ -182,15 +182,15 @@ void showNotification(const char *title, const char *message) {
     printf("NOTIFICATION: %s - %s\n", title, message);
 }
 
+#define TOTAL_CATEGORIES 28
+
 typedef struct {
     int selected;
     int total_options;
     int scrollOffset;
-    char options[14][64];
-    int enabled[14];
+    char options[TOTAL_CATEGORIES][64];
+    int enabled[TOTAL_CATEGORIES];
 } MenuOptions;
-
-
 
 typedef struct {
     FileList *fileList;
@@ -276,16 +276,54 @@ typedef enum {
     PROFILE_SELECTIVE
 } CleaningProfile;
 
+void syncMenuToGlobals(MenuOptions *menu) {
+    // Original categories (0-6)
+    cleanSystem = menu->enabled[0];
+    cleanVitaShell = menu->enabled[1];
+    cleanRetroArch = menu->enabled[3];
+    cleanAdrenaline = menu->enabled[5];
+    
+    // Exclusion settings (7, 9, 10, 11)
+    excludePictureFolder = menu->enabled[9];
+    excludeVpkFiles = menu->enabled[10];
+    excludeVitaDBCache = menu->enabled[11];
+    
+    // Orphaned data and all apps temp (12, 13)
+    cleanOrphanedData = menu->enabled[12];
+    cleanAllAppsTempFiles = menu->enabled[13];
+    
+    // NEW: Additional homebrew/emulators (14-22)
+    cleanEasyVpK = menu->enabled[14];
+    cleanDaemon = menu->enabled[15];
+    cleanVitaGrafix = menu->enabled[16];
+    cleanOneturtle = menu->enabled[17];
+    cleanPCSX = menu->enabled[18];
+    cleanMGBA = menu->enabled[19];
+    cleanFlycast = menu->enabled[20];
+    cleanShellbat = menu->enabled[21];
+    cleanSwitchUser = menu->enabled[22];
+    
+    // NEW: System categories (23-27)
+    cleanThemeCache = menu->enabled[23];
+    cleanNotificationCache = menu->enabled[24];
+    cleanActivityLog = menu->enabled[25];
+    cleanOrphanedLicenseFiles = menu->enabled[26];
+    cleanOrphanedDLC = menu->enabled[27];
+    
+    invalidateSpaceCache();
+}
+
 void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
     menu->selected = 0;
     menu->scrollOffset = 0;
-    menu->total_options = 14;
+    menu->total_options = TOTAL_CATEGORIES;
 
+    // Original categories
     strcpy(menu->options[0], "System Temp Files");
     strcpy(menu->options[1], "VitaShell Cache");
     strcpy(menu->options[2], "PKGi Cache");
     strcpy(menu->options[3], "RetroArch Cache");
-    strcpy(menu->options[4], "Autoplugin 2 Cache");
+    strcpy(menu->options[4], "Autoplugin Cache");
     strcpy(menu->options[5], "Adrenaline Cache");
     strcpy(menu->options[6], "Crash Dumps");
     strcpy(menu->options[7], "Exclusion Settings");
@@ -295,54 +333,63 @@ void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
     strcpy(menu->options[11], "Exclude VitaDB Cache");
     strcpy(menu->options[12], "Clean Orphaned App Data");
     strcpy(menu->options[13], "Clean All Apps Temp Files");
+    
+    // NEW: Additional homebrew/emulators
+    strcpy(menu->options[14], "EasyVPK Cache");
+    strcpy(menu->options[15], "DAEMON Cache");
+    strcpy(menu->options[16], "VitaGrafix Cache");
+    strcpy(menu->options[17], "ONETurtle Cache");
+    strcpy(menu->options[18], "PCSX ReARMed Cache");
+    strcpy(menu->options[19], "MGBA Cache");
+    strcpy(menu->options[20], "Flycast Cache");
+    strcpy(menu->options[21], "Shellbat Cache");
+    strcpy(menu->options[22], "Switch User Cache");
+    
+    // NEW: System categories
+    strcpy(menu->options[23], "Theme & Font Cache");
+    strcpy(menu->options[24], "Notifications Cache");
+    strcpy(menu->options[25], "Activity Logs");
+    strcpy(menu->options[26], "Orphaned Licenses (.rif)");
+    strcpy(menu->options[27], "Orphaned DLC Data");
 
     switch (profile) {
         case PROFILE_QUICK:
-            menu->enabled[0] = 0;
-            menu->enabled[1] = 1;
-            menu->enabled[2] = 1;
-            menu->enabled[3] = 1;
-            menu->enabled[4] = 1;
-            menu->enabled[5] = 1;
-            menu->enabled[6] = 0;
-            menu->enabled[7] = 1;
-            menu->enabled[8] = 0;
-            menu->enabled[9] = 0;
-            menu->enabled[10] = 0;
-            menu->enabled[12] = 1;
-            menu->enabled[13] = 0; 
+            // Enable safe caches only
+            for (int i = 0; i < TOTAL_CATEGORIES; i++) {
+                menu->enabled[i] = 0;
+            }
+            menu->enabled[1] = 1;  // VitaShell
+            menu->enabled[2] = 1;  // PKGi
+            menu->enabled[3] = 1;  // RetroArch
+            menu->enabled[4] = 1;  // Autoplugin
+            menu->enabled[5] = 1;  // Adrenaline
+            menu->enabled[7] = 1;  // Exclusion settings header
+            menu->enabled[12] = 0; // Orphaned data off by default
+            menu->enabled[13] = 0; // All apps temp off
+            // All new homebrew enabled by default in quick mode
+            for (int i = 14; i <= 22; i++) menu->enabled[i] = 1;
+            // System caches off in quick mode
+            for (int i = 23; i <= 27; i++) menu->enabled[i] = 0;
             break;
 
         case PROFILE_COMPLETE:
-            for (int i = 0; i < 11; i++) {
+            for (int i = 0; i < TOTAL_CATEGORIES; i++) {
                 menu->enabled[i] = 1;
             }
-            menu->enabled[9] = 0; 
-            menu->enabled[10] = 0; 
-            menu->enabled[12] = 1;
-            menu->enabled[13] = 1; 
+            menu->enabled[9] = 0;  // Exclude pictures
+            menu->enabled[10] = 0; // Exclude VPKs
+            menu->enabled[7] = 1;  // Exclusion settings header
             break;
 
         case PROFILE_SELECTIVE:
-            for (int i = 0; i < 11; i++) {
+            for (int i = 0; i < TOTAL_CATEGORIES; i++) {
                 menu->enabled[i] = 0;
             }
-            menu->enabled[7] = 1;
-            menu->enabled[12] = 0;
-            menu->enabled[13] = 0; 
+            menu->enabled[7] = 1;  // Exclusion settings header always visible
             break;
     }
 
-    cleanOrphanedData = menu->enabled[12];
-    cleanAllAppsTempFiles = menu->enabled[13];
-    excludePictureFolder = menu->enabled[9];
-    excludeVpkFiles = menu->enabled[10];
-    excludeVitaDBCache = menu->enabled[11];
-    cleanVitaShell = menu->enabled[1];
-    cleanRetroArch = menu->enabled[3];
-    cleanAdrenaline = menu->enabled[5];
-    cleanBrowser = (menu->enabled[0] || menu->enabled[7]);
-    cleanSystem = menu->enabled[0];
+    syncMenuToGlobals(menu);
 }
 
 void drawOptionsMenu(vita2d_pgf *font, MenuOptions *menu) {
@@ -381,6 +428,7 @@ void drawOptionsMenu(vita2d_pgf *font, MenuOptions *menu) {
         vita2d_draw_rectangle(checkboxX + 1, checkboxY + 1, 18, 18, RGBA(20, 30, 45, 255));
 
         int shouldShowChecked = menu->enabled[i];
+        // "All Categories" shows check if all 0-6 are enabled
         if (i == 8) {
             shouldShowChecked = 1;
             for (int j = 0; j < 7; j++) {
@@ -401,7 +449,6 @@ void drawOptionsMenu(vita2d_pgf *font, MenuOptions *menu) {
 
         if (i < 7) {
             vita2d_draw_rectangle(780, y + 6, 35, 16, RGBA(0, 150, 200, 150));
-
             const char* sizeIndicators[] = {"~", "~~", "~", "~~", "~", "~~", "~"};
             vita2d_pgf_draw_text(font, 785, y + 17, RGBA(255, 255, 150, 255), 0.8f, sizeIndicators[i]);
         }
@@ -741,7 +788,6 @@ int main() {
                 }
             }
 
-            // Import simplified control bar: single row with central selection
             drawMainControlBar(font, selectedProfile, PROFILE_QUICK, PROFILE_SELECTIVE);
         } else if (showDeleteConfirmation) {
             drawDeleteConfirmation(font, &preview);
@@ -792,7 +838,7 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
             vita2d_draw_rectangle(0, 470, 960, 74, RGBA(15, 25, 40, 200));
             vita2d_draw_rectangle(0, 470, 960, 2, RGBA(0, 150, 255, 255));
 
-            vita2d_pgf_draw_text(font, 30, 495, RGBA(150, 200, 255, 255), 0.9f, "Version 1.11");
+            vita2d_pgf_draw_text(font, 30, 495, RGBA(150, 200, 255, 255), 0.9f, "Version 1.12");
 
             vita2d_pgf_draw_text(font, 30, 520, RGBA(180, 180, 180, 255), 0.85f, "Ready to clean temporary files and optimize your PS Vita");
 
@@ -1196,41 +1242,17 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
             }
             if (pad.buttons & SCE_CTRL_CROSS) {
                 if (menu.selected == 8) {
+                    // "All Categories" - toggle all
                     for (int i = 0; i < 7; i++) {
                         menu.enabled[i] = 1;
                     }
-                    cleanVitaShell = menu.enabled[1];
-                    cleanRetroArch = menu.enabled[3];
-                    cleanAdrenaline = menu.enabled[5];
-                    cleanSystem = menu.enabled[0];
-                    invalidateSpaceCache(); // Invalidate cache when settings change
-                } else if (menu.selected == 9) {
+                    for (int i = 14; i < TOTAL_CATEGORIES; i++) {
+                        menu.enabled[i] = 1;
+                    }
+                    syncMenuToGlobals(&menu);
+                } else if (menu.selected >= 0 && menu.selected < TOTAL_CATEGORIES) {
                     menu.enabled[menu.selected] = !menu.enabled[menu.selected];
-                    excludePictureFolder = menu.enabled[menu.selected];
-                    invalidateSpaceCache(); // Invalidate cache when settings change
-                } else if (menu.selected == 10) {
-                    menu.enabled[menu.selected] = !menu.enabled[menu.selected];
-                    excludeVpkFiles = menu.enabled[menu.selected];
-                    invalidateSpaceCache(); // Invalidate cache when settings change
-                } else if (menu.selected == 11) {
-                    menu.enabled[menu.selected] = !menu.enabled[menu.selected];
-                    excludeVitaDBCache = menu.enabled[menu.selected];
-                    invalidateSpaceCache(); // Invalidate cache when settings change
-                } else if (menu.selected == 12) {
-                    menu.enabled[menu.selected] = !menu.enabled[menu.selected];
-                    cleanOrphanedData = menu.enabled[menu.selected];
-                    invalidateSpaceCache(); // Invalidate cache when settings change
-                } else if (menu.selected == 13) {
-                    menu.enabled[menu.selected] = !menu.enabled[menu.selected];
-                    cleanAllAppsTempFiles = menu.enabled[menu.selected];
-                    invalidateSpaceCache(); // Invalidate cache when settings change
-                } else {
-                    menu.enabled[menu.selected] = !menu.enabled[menu.selected];
-                    if (menu.selected == 1) cleanVitaShell = menu.enabled[1];
-                    else if (menu.selected == 3) cleanRetroArch = menu.enabled[3];
-                    else if (menu.selected == 5) cleanAdrenaline = menu.enabled[5];
-                    else if (menu.selected == 0) cleanSystem = menu.enabled[0];
-                    invalidateSpaceCache(); // Invalidate cache when settings change
+                    syncMenuToGlobals(&menu);
                 }
                 sceKernelDelayThread(200 * 1000);
             }
@@ -1242,10 +1264,10 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
                         break;
                     }
                 }
-
                 for (int i = 0; i < 7; i++) {
                     menu.enabled[i] = !allEnabled;
                 }
+                syncMenuToGlobals(&menu);
                 sceKernelDelayThread(200 * 1000);
             }
             if (pad.buttons & SCE_CTRL_CIRCLE) {

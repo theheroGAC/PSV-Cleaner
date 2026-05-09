@@ -121,6 +121,36 @@ extern int cleanSystem;
 extern int cleanOrphanedData;
 extern int cleanAllAppsTempFiles;
 
+// NEW: Additional homebrew/emulator cleaning settings
+extern int cleanEasyVpK;
+extern int cleanDaemon;
+extern int cleanVitaGrafix;
+extern int cleanOneturtle;
+extern int cleanPCSX;
+extern int cleanMGBA;
+extern int cleanFlycast;
+extern int cleanShellbat;
+extern int cleanSwitchUser;
+extern int cleanITLS;
+extern int cleanVHBB;
+extern int cleanPSVitaDB;
+extern int cleanDownloadEnabler;
+
+// NEW: Additional system cleaning categories
+extern int cleanThemeCache;
+extern int cleanNotificationCache;
+extern int cleanActivityLog;
+extern int cleanPhotoMusicCache;
+extern int cleanSceShellCache;
+extern int cleanFontCache;
+extern int cleanRegistryTemp;
+extern int cleanNetworkCache;
+extern int cleanLicenseCache;
+extern int cleanOrphanedLicenseFiles;
+extern int cleanOrphanedDLC;
+extern int cleanOrphanedAddcont;
+extern int cleanEmptyLiveareaBubbles;
+
 // Cleanup counter functionality
 int loadCleanupCounter();
 void saveCleanupCounter(int count);
@@ -155,6 +185,16 @@ void populateAppListWithSizes(AppList *list);
 unsigned long long calculateSingleAppTempFilesSize(const char *titleId);
 unsigned long long cleanSingleAppTempFiles(const char *titleId);
 
+// NEW: DLC and addcont orphan cleaning
+unsigned long long calculateOrphanedDLCDataSize();
+void findOrphanedDLCData();
+unsigned long long calculateOrphanedAddcontSize();
+void findOrphanedAddcont();
+unsigned long long calculateOrphanedLicenseFilesSize();
+void findOrphanedLicenseFiles();
+unsigned long long calculateEmptyLiveareaBubblesSize();
+void removeEmptyLiveareaBubbles();
+
 // Preview functions
 FileList* createFileList();
 void freeFileList(FileList *list);
@@ -176,8 +216,9 @@ void cleanupAfterEmergencyStop();
 #endif // PSV_CLEANER_CORE_H
 
 // Localization and themes module
-#define MAX_LANGUAGES 1
+#define MAX_LANGUAGES 2
 #define LANGUAGE_EN 0
+#define LANGUAGE_IT 1
 
 typedef enum {
     THEME_LIGHT = 0,
@@ -203,14 +244,12 @@ extern AppTheme currentTheme;
 extern ThemeColors themes[2];
 
 // Language arrays - fixed declarations
-extern const char* lang_titles_screen[MAX_LANGUAGES][10];
+extern const char* lang_titles_screen[MAX_LANGUAGES][15];
 extern const char* lang_profile_options[MAX_LANGUAGES][6];
-extern const char* lang_ui_text[MAX_LANGUAGES][20];
-
-
+extern const char* lang_ui_text[MAX_LANGUAGES][30];
 
 // Functions
-const char* L(const char* lang_array[][20], int lang_index, int text_index);
+const char* L(const char* lang_array[][30], int lang_index, int text_index);
 void detectSystemLanguage();
 void setTheme(AppTheme theme);
 void applyThemeColors(ThemeColors* colors);

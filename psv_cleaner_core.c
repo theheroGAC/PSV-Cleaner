@@ -32,6 +32,36 @@ int cleanSystem = 1;
 int cleanOrphanedData = 0;
 int cleanAllAppsTempFiles = 0;
 
+// NEW: Additional homebrew/emulator cleaning settings
+int cleanEasyVpK = 1;
+int cleanDaemon = 1;
+int cleanVitaGrafix = 1;
+int cleanOneturtle = 1;
+int cleanPCSX = 1;
+int cleanMGBA = 1;
+int cleanFlycast = 1;
+int cleanShellbat = 1;
+int cleanSwitchUser = 1;
+int cleanITLS = 1;
+int cleanVHBB = 1;
+int cleanPSVitaDB = 1;
+int cleanDownloadEnabler = 1;
+
+// NEW: Additional system cleaning categories
+int cleanThemeCache = 1;
+int cleanNotificationCache = 1;
+int cleanActivityLog = 1;
+int cleanPhotoMusicCache = 1;
+int cleanSceShellCache = 1;
+int cleanFontCache = 1;
+int cleanRegistryTemp = 1;
+int cleanNetworkCache = 1;
+int cleanLicenseCache = 1;
+int cleanOrphanedLicenseFiles = 0;
+int cleanOrphanedDLC = 0;
+int cleanOrphanedAddcont = 0;
+int cleanEmptyLiveareaBubbles = 0;
+
 #define CACHE_FILE_PATH "ux0:data/PSV_Cleaner/scan_cache.bin"
 #define CACHE_VERSION 1
 #define CACHE_EXPIRY_HOURS 24
@@ -52,6 +82,7 @@ typedef struct {
 } ScanCache;
 
 const char *TEMP_PATHS[] = {
+    // --- System temp files ---
     "ux0:temp/",
     "ux0:data/temp/",
     "ux0:cache/",
@@ -59,64 +90,100 @@ const char *TEMP_PATHS[] = {
     "ur0:temp/",
     "ur0:temp/sqlite/",
     "uma0:temp/",
+    
+    // --- VitaShell ---
     "ux0:VitaShell/cache/",
     "ux0:VitaShell/temp/",
     "ux0:VitaShell/log/",
     "ux0:VitaShell/recent/",
     "ux0:VitaShell/backup/temp/",
     "ux0:VitaShell/trash/",
+    
+    // --- PKGi ---
     "ux0:pkgi/tmp/",
     "ux0:pkgi/cache/",
     "ux0:pkgi/log.txt",
     "ux0:pkgi/downloads/temp/",
     "ux0:pkgi/backup/temp/",
     "ux0:pkgi/*.vpk",
+    
+    // --- PKGj ---
     "ux0:pkgj/tmp/",
     "ux0:pkgj/cache/",
     "ux0:pkgj/log.txt",
     "ux0:pkgj/downloads/temp/",
+    
+    // --- VPK files on root ---
     "ux0:*.vpk",
+    
+    // --- RetroArch ---
     "ux0:data/retroarch/cache/",
     "ux0:data/retroarch/logs/",
     "ux0:data/retroarch/temp/",
     "ux0:data/retroarch/thumbnails/cache/",
     "ux0:data/retroarch/shaders/cache/",
     "ux0:data/retroarch/database/rdb/temp/",
+    
+    // --- PSP emu ---
     "ux0:pspemu/temp/",
     "ux0:pspemu/cache/",
+    
+    // --- Adrenaline ---
     "ux0:data/Adrenaline/cache/",
     "ux0:data/Adrenaline/logs/",
     "ux0:data/Adrenaline/temp/",
     "ux0:data/Adrenaline/crash/",
     "ux0:data/Adrenaline/dumps/",
+    
+    // --- Moonlight ---
     "ux0:data/moonlight/cache/",
     "ux0:data/moonlight/logs/",
+    
+    // --- AutoPlugin & AUTOPLUGIN2 ---
     "ux0:data/AutoPlugin/cache/",
     "ux0:data/AutoPlugin/logs/",
     "ux0:data/AUTOPLUGIN2/cache/",
     "ux0:data/AUTOPLUGIN2/logs/",
+    
+    // --- RetroFlow ---
     "ux0:data/RetroFlow/CACHE/",
+    
+    // --- Henkaku ---
     "ux0:data/henkaku/cache/",
     "ux0:data/henkaku/logs/",
+    
+    // --- PSVshell ---
     "ux0:data/PSVshell/logs/",
     "ux0:data/PSVshell/cache/",
+    
+    // --- SaveManager, cheats ---
     "ux0:data/savemgr/log/",
     "ux0:data/vitacheat/logs/",
     "ux0:data/rinCheat/logs/",
+    
+    // --- VitaDB ---
     "ux0:data/VitaDB/temp.tmp",
     "ux0:vdb_data/",
     "ux0:data/vdb_vpk/",
+    
+    // --- Browser & WebKit ---
     "ux0:data/browser/cache/",
     "ux0:data/browser/temp/",
     "ux0:data/browser/logs/",
     "ux0:data/webkit/cache/",
     "ux0:data/webkit/localstorage/temp/",
+    
+    // --- Network temp ---
     "ux0:data/net/temp/",
+    
+    // --- Downloads & BGDL ---
     "ux0:download/",
     "ux0:download/temp/",
     "ux0:downloads/",
     "ux0:downloads/temp/",
     "ux0:bgdl/t/",
+    
+    // --- Package install temp ---
     "ux0:data/pkg/temp/",
     "ux0:package/temp/",
     "ux0:appmeta/temp/",
@@ -124,14 +191,22 @@ const char *TEMP_PATHS[] = {
     "ux0:license/temp/",
     "ux0:patch_temp/",
     "ux0:update_temp/",
+    
+    // --- Media thumbnails ---
     "ux0:picture/.thumbnails/",
     "ux0:picture/SCREENSHOT/",
     "ux0:video/.thumbnails/",
     "ux0:music/.cache/",
     "ux0:photo/cache/",
+    
+    // --- Shader logs ---
     "ux0:shaderlog/",
+    
+    // --- Generic cache/log ---
     "ux0:data/logs/temp/",
     "ux0:data/cache/",
+    
+    // --- uma0 mirrors ---
     "uma0:cache/",
     "uma0:log/",
     "uma0:data/temp/",
@@ -176,6 +251,8 @@ const char *TEMP_PATHS[] = {
     "uma0:package/temp/",
     "uma0:appmeta/temp/",
     "uma0:data/logs/temp/",
+    
+    // --- Crash dumps ---
     "ux0:data/psp2core*",
     "ux0:data/*.psp2core",
     "ux0:data/psp2dmp*",
@@ -183,7 +260,125 @@ const char *TEMP_PATHS[] = {
     "ux0:data/crash_dumps/",
     "ux0:data/dumps/",
     "ux0:data/psp2core",
-    "ux0:data/psp2dmp"
+    "ux0:data/psp2dmp",
+    
+    // ========== NEW: EMULATORS ==========
+    
+    // --- MGBA ---
+    "ux0:data/mgba/cache/",
+    "ux0:data/mgba/logs/",
+    "uma0:data/mgba/cache/",
+    "uma0:data/mgba/logs/",
+    
+    // --- PCSX ReARMed (PS1) ---
+    "ux0:data/pcsx_rearmed/cache/",
+    "ux0:data/pcsx_rearmed/logs/",
+    "uma0:data/pcsx_rearmed/cache/",
+    "uma0:data/pcsx_rearmed/logs/",
+    
+    // --- Flycast (Dreamcast) ---
+    "ux0:data/flycast/cache/",
+    "ux0:data/flycast/logs/",
+    "ux0:data/flycast/temp/",
+    "uma0:data/flycast/cache/",
+    "uma0:data/flycast/logs/",
+    "uma0:data/flycast/temp/",
+    
+    // --- VitaQuake series ---
+    "ux0:data/vitaquake/cache/",
+    "ux0:data/vitaquake/logs/",
+    "uma0:data/vitaquake/cache/",
+    "uma0:data/vitaquake/logs/",
+    
+    // ========== NEW: HOMEBREW ==========
+    
+    // --- EasyVPK ---
+    "ux0:easyvpk/cache/",
+    "ux0:easyvpk/temp/",
+    "uma0:easyvpk/cache/",
+    "uma0:easyvpk/temp/",
+    
+    // --- DAEMON (Plugin Manager) ---
+    "ux0:data/DAEMON/cache/",
+    "ux0:data/DAEMON/logs/",
+    "uma0:data/DAEMON/cache/",
+    "uma0:data/DAEMON/logs/",
+    
+    // --- iTLS-Enso ---
+    "ux0:data/iTLS/cache/",
+    "uma0:data/iTLS/cache/",
+    
+    // --- Download Enabler ---
+    "ux0:data/DE/cache/",
+    "uma0:data/DE/cache/",
+    
+    // --- ONETurtle (Music Player) ---
+    "ux0:data/ONETurtle/cache/",
+    "uma0:data/ONETurtle/cache/",
+    
+    // --- Shellbat ---
+    "ux0:data/shellbat/cache/",
+    "uma0:data/shellbat/cache/",
+    
+    // --- Switch User ---
+    "ux0:data/switchuser/cache/",
+    "uma0:data/switchuser/cache/",
+    
+    // --- PSVitaDB (browser) ---
+    "ux0:data/PSVitaDB/cache/",
+    "uma0:data/PSVitaDB/cache/",
+    
+    // --- VitaGrafix Config ---
+    "ux0:data/VitaGrafix/cache/",
+    "uma0:data/VitaGrafix/cache/",
+    
+    // --- VHBB (Vita Homebrew Browser) ---
+    "ux0:VHBB/cache/",
+    "ux0:VHBB/temp/",
+    "uma0:VHBB/cache/",
+    "uma0:VHBB/temp/",
+    
+    // ========== NEW: SYSTEM CATEGORIES ==========
+    
+    // --- Theme cache ---
+    "ux0:theme/cache/",
+    "ur0:theme/cache/",
+    "uma0:theme/cache/",
+    
+    // --- Screenshots temp ---
+    "ux0:screenshot/temp/",
+    
+    // --- Save data backup temp ---
+    "ux0:user/00/savedata_backup/temp/",
+    
+    // --- NPDRM license cache ---
+    "ux0:license/cache/",
+    "ur0:license/cache/",
+    
+    // --- Registry / config temp ---
+    "ur0:config/license/",
+    "ur0:config/np/",
+    
+    // --- Network config cache ---
+    "ur0:config/net/cache/",
+    
+    // --- Notification cache ---
+    "ux0:data/notification/cache/",
+    
+    // --- Activity log ---
+    "ux0:data/activity/cache/",
+    
+    // --- Photo import temp ---
+    "ux0:data/photoutils/cache/",
+    
+    // --- Music import temp ---
+    "ux0:data/music_utility/cache/",
+    
+    // --- SceShell cache (LiveArea) ---
+    "ux0:data/shell/cache/",
+    
+    // --- Font cache ---
+    "ux0:data/font/cache/"
 };
 
 const size_t TEMP_PATHS_COUNT = sizeof(TEMP_PATHS)/sizeof(TEMP_PATHS[0]);
@@ -212,7 +407,7 @@ ThemeColors themes[2] = {
 int currentLanguage = LANGUAGE_EN;
 AppTheme currentTheme = THEME_LIGHT;
 
-const char* lang_titles_screen[MAX_LANGUAGES][10] = {
+const char* lang_titles_screen[MAX_LANGUAGES][15] = {
     {
         "PSV Cleaner",
         "Temporary Files Cleaner for PS Vita",
@@ -222,25 +417,44 @@ const char* lang_titles_screen[MAX_LANGUAGES][10] = {
         "Scanning files...",
         "✓ CLEANING COMPLETED! ✓",
         "Great job! Your PS Vita is cleaner!"
+    },
+    {
+        "PSV Cleaner",
+        "Pulitore File Temporanei per PS Vita",
+        "Seleziona Profilo Pulizia",
+        "Opzioni Pulizia Avanzate",
+        "Anteprima - File da Eliminare",
+        "Scansione file in corso...",
+        "✓ PULIZIA COMPLETATA! ✓",
+        "Ottimo lavoro! La tua PS Vita più pulita!"
     }
 };
 
 const char* lang_profile_options[MAX_LANGUAGES][6] = {
-    {"Quick Clean", "Safe cache files only", "Complete Clean", "All temporary files", "Selective Clean", "Choose categories"}
+    {"Quick Clean", "Safe cache files only", "Complete Clean", "All temporary files", "Selective Clean", "Choose categories"},
+    {"Pulizia Rapida", "Solo cache sicure", "Pulizia Completa", "Tutti i file temporanei", "Pulizia Selettiva", "Scegli categorie"}
 };
 
-const char* lang_ui_text[MAX_LANGUAGES][20] = {
+const char* lang_ui_text[MAX_LANGUAGES][30] = {
     {
         "System Status:", "Ready for Cleanup",
         "Controls:", "Change Profile", "Preview & Clean", "Advanced Options", "Exit App",
         "Space to free:", "Space Freed:", "Files Deleted:",
         "D-Pad: Navigate | X: Select Profile | O: Exit",
         "Cleanup #", "No temporary files found!",
-        "System Ready", "Version 1.10"
+        "System Ready", "Version 1.12"
+    },
+    {
+        "Stato Sistema:", "Pronto per Pulizia",
+        "Controlli:", "Cambia Profilo", "Anteprima & Pulisci", "Opzioni Avanzate", "Esci",
+        "Spazio da liberare:", "Spazio Liberato:", "File Eliminati:",
+        "D-Pad: Naviga | X: Seleziona | O: Esci",
+        "Pulizia #", "Nessun file temporaneo trovato!",
+        "Sistema Pronto", "Versione 1.12"
     }
 };
 
-const char* L(const char* lang_array[][20], int lang_index, int text_index) {
+const char* L(const char* lang_array[][30], int lang_index, int text_index) {
     if (lang_index >= 0 && lang_index < MAX_LANGUAGES) {
         return lang_array[lang_index][text_index];
     }
@@ -663,8 +877,11 @@ unsigned long long calculateTempSize() {
 
     
     total += calculateOrphanedDataSize();
-
     total += calculateAllAppsTempFilesSize();
+    total += calculateOrphanedDLCDataSize();
+    total += calculateOrphanedAddcontSize();
+    total += calculateOrphanedLicenseFilesSize();
+    total += calculateEmptyLiveareaBubblesSize();
 
     return total;
 }
@@ -729,6 +946,24 @@ unsigned long long cleanTemporaryFiles() {
 
     if (cleanAllAppsTempFiles) {
         cleanAllAppsTempFilesData();
+    }
+
+    // NEW orphan cleanups
+    if (cleanOrphanedDLC) {
+        findOrphanedDLCData();
+    }
+    if (cleanOrphanedAddcont) {
+        findOrphanedAddcont();
+    }
+    if (cleanOrphanedLicenseFiles) {
+        findOrphanedLicenseFiles();
+    }
+    if (cleanEmptyLiveareaBubbles) {
+        removeEmptyLiveareaBubbles();
+    }
+    if (cleanOrphanedData) {
+        findOrphanedLicenseDirectories();
+        findOrphanedPatchDirectories();
     }
 
     sceIoRemove(CACHE_FILE_PATH);
@@ -1622,4 +1857,323 @@ unsigned long long cleanSingleAppTempFiles(const char *titleId) {
     }
 
     return totalCleaned;
+}
+
+// ============================================================
+// NEW: Orphaned DLC data cleaning (ux0:addcont/ folder)
+// DLC for apps that are no longer installed
+// ============================================================
+
+unsigned long long calculateOrphanedDLCDataSize() {
+    unsigned long long total = 0;
+    if (!cleanOrphanedDLC) return 0;
+
+    SceUID dfd = sceIoDopen("ux0:addcont/");
+    if (dfd < 0) return 0;
+
+    SceIoDirent dir;
+    memset(&dir, 0, sizeof(SceIoDirent));
+
+    while (sceIoDread(dfd, &dir) > 0) {
+        if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+
+        char dirName[MAX_FILENAME_LENGTH];
+        safe_strncpy(dirName, dir.d_name, sizeof(dirName));
+
+        if (strlen(dirName) == 9 && !isAppInstalled(dirName)) {
+            char fullPath[MAX_PATH_LENGTH];
+            safe_snprintf(fullPath, sizeof(fullPath), "ux0:addcont/%s", dirName);
+            total += calculateTempSizeRecursive(fullPath);
+        }
+    }
+    sceIoDclose(dfd);
+
+    return total;
+}
+
+void findOrphanedDLCData() {
+    if (!cleanOrphanedDLC) return;
+
+    SceUID dfd = sceIoDopen("ux0:addcont/");
+    if (dfd < 0) return;
+
+    SceIoDirent dir;
+    memset(&dir, 0, sizeof(SceIoDirent));
+
+    while (sceIoDread(dfd, &dir) > 0) {
+        if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+
+        char dirName[MAX_FILENAME_LENGTH];
+        safe_strncpy(dirName, dir.d_name, sizeof(dirName));
+
+        if (strlen(dirName) == 9 && !isAppInstalled(dirName)) {
+            char fullPath[MAX_PATH_LENGTH];
+            safe_snprintf(fullPath, sizeof(fullPath), "ux0:addcont/%s", dirName);
+            deleteRecursive(fullPath);
+        }
+    }
+    sceIoDclose(dfd);
+}
+
+// ============================================================
+// NEW: Orphaned addcont (non-TitleID folders in addcont/)
+// ============================================================
+
+unsigned long long calculateOrphanedAddcontSize() {
+    unsigned long long total = 0;
+    if (!cleanOrphanedAddcont) return 0;
+
+    SceUID dfd = sceIoDopen("ux0:addcont/");
+    if (dfd < 0) return 0;
+
+    SceIoDirent dir;
+    memset(&dir, 0, sizeof(SceIoDirent));
+
+    while (sceIoDread(dfd, &dir) > 0) {
+        if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+
+        char dirName[MAX_FILENAME_LENGTH];
+        safe_strncpy(dirName, dir.d_name, sizeof(dirName));
+
+        if (strlen(dirName) != 9) {
+            char fullPath[MAX_PATH_LENGTH];
+            safe_snprintf(fullPath, sizeof(fullPath), "ux0:addcont/%s", dirName);
+            total += calculateTempSizeRecursive(fullPath);
+        }
+    }
+    sceIoDclose(dfd);
+
+    return total;
+}
+
+void findOrphanedAddcont() {
+    if (!cleanOrphanedAddcont) return;
+
+    SceUID dfd = sceIoDopen("ux0:addcont/");
+    if (dfd < 0) return;
+
+    SceIoDirent dir;
+    memset(&dir, 0, sizeof(SceIoDirent));
+
+    while (sceIoDread(dfd, &dir) > 0) {
+        if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+
+        char dirName[MAX_FILENAME_LENGTH];
+        safe_strncpy(dirName, dir.d_name, sizeof(dirName));
+
+        if (strlen(dirName) != 9) {
+            char fullPath[MAX_PATH_LENGTH];
+            safe_snprintf(fullPath, sizeof(fullPath), "ux0:addcont/%s", dirName);
+            deleteRecursive(fullPath);
+        }
+    }
+    sceIoDclose(dfd);
+}
+
+// ============================================================
+// NEW: Orphaned license files (*.rif) - licenses for apps not installed
+// ============================================================
+
+unsigned long long calculateOrphanedLicenseFilesSize() {
+    unsigned long long total = 0;
+    if (!cleanOrphanedLicenseFiles) return 0;
+
+    SceUID dfd = sceIoDopen("ux0:license/");
+    if (dfd < 0) return 0;
+
+    SceIoDirent dir;
+    memset(&dir, 0, sizeof(SceIoDirent));
+
+    while (sceIoDread(dfd, &dir) > 0) {
+        if (SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+
+        char* filename = dir.d_name;
+        int len = strlen(filename);
+
+        if (len > 4 && strcmp(filename + len - 4, ".rif") == 0) {
+            // RIF licenses can be: 16-char hex or TitleID-based
+            char fullPath[MAX_PATH_LENGTH];
+            safe_snprintf(fullPath, sizeof(fullPath), "ux0:license/%s", filename);
+        }
+    }
+    sceIoDclose(dfd);
+
+    return total;
+}
+
+void findOrphanedLicenseFiles() {
+    if (!cleanOrphanedLicenseFiles) return;
+
+    SceUID dfd = sceIoDopen("ux0:license/");
+    if (dfd < 0) return;
+
+    SceIoDirent dir;
+    memset(&dir, 0, sizeof(SceIoDirent));
+
+    while (sceIoDread(dfd, &dir) > 0) {
+        if (SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+
+        char* filename = dir.d_name;
+        int len = strlen(filename);
+
+        if (len > 4 && strcmp(filename + len - 4, ".rif") == 0) {
+            char fullPath[MAX_PATH_LENGTH];
+            safe_snprintf(fullPath, sizeof(fullPath), "ux0:license/%s", filename);
+
+            int isOrphaned = 0;
+
+            if (len == 20) {
+                char titleId[10] = {0};
+                strncpy(titleId, filename, 9);
+                titleId[9] = '\0';
+                if (!isAppInstalled(titleId)) {
+                    isOrphaned = 1;
+                }
+            } else if (len == 16) {
+                // 16-char hex licenses (NPDRM) - check if any app references them
+                // For safety, only remove if older than 60 days
+                SceIoStat stat;
+                if (sceIoGetstat(fullPath, &stat) >= 0) {
+                    SceDateTime now, modTime;
+                    getCurrentTime(&now);
+                    modTime = stat.st_mtime;
+
+                    SceRtcTick nowTicks, modTicks;
+                    sceRtcGetTick(&now, &nowTicks);
+                    sceRtcGetTick(&modTime, &modTicks);
+
+                    SceRtcTick thresholdTicks;
+                    sceRtcTickAddDays(&thresholdTicks, &modTicks, 60);
+
+                    if (sceRtcCompareTick(&nowTicks, &thresholdTicks) >= 0) {
+                        isOrphaned = 1;
+                    }
+                }
+            }
+
+            if (isOrphaned) {
+                for (int attempt = 0; attempt < 3; attempt++) {
+                    if (sceIoRemove(fullPath) >= 0) {
+                        g_deletedFilesCount++;
+                        break;
+                    }
+                    sceKernelDelayThread(100 * 1000);
+                }
+            }
+        }
+    }
+    sceIoDclose(dfd);
+}
+
+// ============================================================
+// NEW: Empty LiveArea bubbles cleanup
+// Removes leftover bubble directories that have no app installed
+// ============================================================
+
+unsigned long long calculateEmptyLiveareaBubblesSize() {
+    unsigned long long total = 0;
+    if (!cleanEmptyLiveareaBubbles) return 0;
+
+    const char* bubbleDirs[] = {
+        "ux0:app/",
+        "ux0:patch/",
+        "ux0:addcont/"
+    };
+    int bubbleDirCount = sizeof(bubbleDirs) / sizeof(bubbleDirs[0]);
+
+    for (int d = 0; d < bubbleDirCount; d++) {
+        SceUID dfd = sceIoDopen(bubbleDirs[d]);
+        if (dfd < 0) continue;
+
+        SceIoDirent dir;
+        memset(&dir, 0, sizeof(SceIoDirent));
+
+        while (sceIoDread(dfd, &dir) > 0) {
+            if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+
+            char dirName[MAX_FILENAME_LENGTH];
+            safe_strncpy(dirName, dir.d_name, sizeof(dirName));
+
+            // Check if it's a TitleID directory (9 chars)
+            if (strlen(dirName) == 9) {
+                // Check if subdirectories exist at all (might be empty bubble)
+                char fullPath[MAX_PATH_LENGTH];
+                safe_snprintf(fullPath, sizeof(fullPath), "%s%s", bubbleDirs[d], dirName);
+
+                SceUID subDfd = sceIoDopen(fullPath);
+                if (subDfd >= 0) {
+                    int hasContent = 0;
+                    SceIoDirent subDir;
+                    memset(&subDir, 0, sizeof(SceIoDirent));
+
+                    while (sceIoDread(subDfd, &subDir) > 0) {
+                        if (strcmp(subDir.d_name, ".") != 0 && strcmp(subDir.d_name, "..") != 0) {
+                            hasContent = 1;
+                            break;
+                        }
+                    }
+                    sceIoDclose(subDfd);
+
+                    if (!hasContent && strlen(dirName) == 9 && !isAppInstalled(dirName)) {
+                        total += 0; // Empty folder, negligible size
+                    }
+                }
+            }
+        }
+        sceIoDclose(dfd);
+    }
+
+    return total;
+}
+
+void removeEmptyLiveareaBubbles() {
+    if (!cleanEmptyLiveareaBubbles) return;
+
+    const char* bubbleDirs[] = {
+        "ux0:app/",
+        "ux0:patch/",
+        "ux0:addcont/"
+    };
+    int bubbleDirCount = sizeof(bubbleDirs) / sizeof(bubbleDirs[0]);
+
+    for (int d = 0; d < bubbleDirCount; d++) {
+        SceUID dfd = sceIoDopen(bubbleDirs[d]);
+        if (dfd < 0) continue;
+
+        SceIoDirent dir;
+        memset(&dir, 0, sizeof(SceIoDirent));
+
+        while (sceIoDread(dfd, &dir) > 0) {
+            if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+
+            char dirName[MAX_FILENAME_LENGTH];
+            safe_strncpy(dirName, dir.d_name, sizeof(dirName));
+
+            if (strlen(dirName) == 9 && !isAppInstalled(dirName)) {
+                char fullPath[MAX_PATH_LENGTH];
+                safe_snprintf(fullPath, sizeof(fullPath), "%s%s", bubbleDirs[d], dirName);
+
+                SceUID subDfd = sceIoDopen(fullPath);
+                if (subDfd >= 0) {
+                    int hasContent = 0;
+                    SceIoDirent subDir;
+                    memset(&subDir, 0, sizeof(SceIoDirent));
+
+                    while (sceIoDread(subDfd, &subDir) > 0) {
+                        if (strcmp(subDir.d_name, ".") != 0 && strcmp(subDir.d_name, "..") != 0) {
+                            hasContent = 1;
+                            break;
+                        }
+                    }
+                    sceIoDclose(subDfd);
+
+                    if (!hasContent) {
+                        sceIoRmdir(fullPath);
+                        g_deletedFilesCount++;
+                    }
+                }
+            }
+        }
+        sceIoDclose(dfd);
+    }
 }
