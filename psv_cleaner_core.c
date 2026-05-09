@@ -417,22 +417,11 @@ const char* lang_titles_screen[MAX_LANGUAGES][15] = {
         "Scanning files...",
         "✓ CLEANING COMPLETED! ✓",
         "Great job! Your PS Vita is cleaner!"
-    },
-    {
-        "PSV Cleaner",
-        "Pulitore File Temporanei per PS Vita",
-        "Seleziona Profilo Pulizia",
-        "Opzioni Pulizia Avanzate",
-        "Anteprima - File da Eliminare",
-        "Scansione file in corso...",
-        "✓ PULIZIA COMPLETATA! ✓",
-        "Ottimo lavoro! La tua PS Vita più pulita!"
     }
 };
 
 const char* lang_profile_options[MAX_LANGUAGES][6] = {
-    {"Quick Clean", "Safe cache files only", "Complete Clean", "All temporary files", "Selective Clean", "Choose categories"},
-    {"Pulizia Rapida", "Solo cache sicure", "Pulizia Completa", "Tutti i file temporanei", "Pulizia Selettiva", "Scegli categorie"}
+    {"Quick Clean", "Safe cache files only", "Complete Clean", "All temporary files", "Selective Clean", "Choose categories"}
 };
 
 const char* lang_ui_text[MAX_LANGUAGES][30] = {
@@ -443,14 +432,6 @@ const char* lang_ui_text[MAX_LANGUAGES][30] = {
         "D-Pad: Navigate | X: Select Profile | O: Exit",
         "Cleanup #", "No temporary files found!",
         "System Ready", "Version 1.12"
-    },
-    {
-        "Stato Sistema:", "Pronto per Pulizia",
-        "Controlli:", "Cambia Profilo", "Anteprima & Pulisci", "Opzioni Avanzate", "Esci",
-        "Spazio da liberare:", "Spazio Liberato:", "File Eliminati:",
-        "D-Pad: Naviga | X: Seleziona | O: Esci",
-        "Pulizia #", "Nessun file temporaneo trovato!",
-        "Sistema Pronto", "Versione 1.12"
     }
 };
 

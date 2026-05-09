@@ -216,9 +216,11 @@ void cleanupAfterEmergencyStop();
 #endif // PSV_CLEANER_CORE_H
 
 // Localization and themes module
-#define MAX_LANGUAGES 2
+#define MAX_LANGUAGES 1
 #define LANGUAGE_EN 0
 #define LANGUAGE_IT 1
+#define LANGUAGE_ES 2
+#define LANGUAGE_FR 3
 
 typedef enum {
     THEME_LIGHT = 0,
