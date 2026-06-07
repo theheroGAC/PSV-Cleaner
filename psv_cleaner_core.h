@@ -8,10 +8,8 @@
 #include <stdarg.h>
 #include <psp2/apputil.h>
 
-// Define RGBA macro for color values
 #define RGBA(r,g,b,a) ((a) << 24 | (r) << 16 | (g) << 8 | (b))
 
-// Safe buffer sizes to prevent overflow
 #define MAX_PATH_LENGTH 1024
 #define MAX_FILENAME_LENGTH 256
 #define MAX_FILE_FILTER_LENGTH 32
@@ -58,8 +56,22 @@ static inline int is_safe_path(const char *path) {
     if (len == 0 || len >= MAX_PATH_LENGTH) return 0;
 
     if (strstr(path, "..") != NULL) return 0;
+    if (strstr(path, "./") != NULL) return 0;
+    if (strstr(path, "/.") != NULL && strstr(path, "/./") == NULL && strstr(path, "/..") == NULL) return 0;
 
-    if (path[0] != 'u' && path[0] != 'm') return 0;
+    for (size_t i = 0; i < len; i++) {
+        if (path[i] == '\0') return 0;
+    }
+
+    const char *colon = strchr(path, ':');
+    if (!colon || colon == path) return 0;
+    if (colon - path > 8) return 0;
+
+    const char *invalid_chars = "<>\"|?*";
+    for (size_t i = 0; i < len; i++) {
+        if (strchr(invalid_chars, path[i]) != NULL) return 0;
+    }
+    if (strrchr(path, ':') != colon) return 0;
 
     return 1;
 }
@@ -95,24 +107,23 @@ typedef struct {
     int capacity;
 } AppList;
 
-// Global counter for deleted files
 extern int g_deletedFilesCount;
 
-// Emergency stop system
 extern int g_emergencyStop;
 extern int g_operationInProgress;
 
-// Performance optimization for main screen
 extern unsigned long long g_cachedSpaceSize;
 extern int g_spaceCalculationNeeded;
 extern int g_lastCalculationFrame;
 
-// Exclusion settings
+extern int g_scanProgress;
+extern int g_totalScanItems;
+extern int g_currentScanItem;
+
 extern int excludePictureFolder;
 extern int excludeVpkFiles;
 extern int excludeVitaDBCache;
 
-// Selective app cleaning settings
 extern int cleanVitaShell;
 extern int cleanRetroArch;
 extern int cleanAdrenaline;
@@ -121,7 +132,6 @@ extern int cleanSystem;
 extern int cleanOrphanedData;
 extern int cleanAllAppsTempFiles;
 
-// NEW: Additional homebrew/emulator cleaning settings
 extern int cleanEasyVpK;
 extern int cleanDaemon;
 extern int cleanVitaGrafix;
@@ -135,8 +145,12 @@ extern int cleanITLS;
 extern int cleanVHBB;
 extern int cleanPSVitaDB;
 extern int cleanDownloadEnabler;
+extern int cleanMoonlight;
+extern int cleanRetroFlow;
+extern int cleanHenkaku;
+extern int cleanPSVshell;
+extern int cleanCheatTools;
 
-// NEW: Additional system cleaning categories
 extern int cleanThemeCache;
 extern int cleanNotificationCache;
 extern int cleanActivityLog;
@@ -151,11 +165,9 @@ extern int cleanOrphanedDLC;
 extern int cleanOrphanedAddcont;
 extern int cleanEmptyLiveareaBubbles;
 
-// Cleanup counter functionality
 int loadCleanupCounter();
 void saveCleanupCounter(int count);
 
-// Function declarations
 unsigned long long calculateTempSize();
 unsigned long long calculateTempSizeOptimized();
 unsigned long long calculateTempSizeRecursive(const char *path);
@@ -167,6 +179,7 @@ void resetDeletedFilesCount();
 void deleteRecursive(const char *path);
 void forceDeleteDumpFiles();
 void aggressiveDumpCleanup();
+void clearScanCache();
 
 void getInstalledAppsList(char ***apps, int *count);
 int isAppInstalled(const char *title_id);
@@ -185,7 +198,6 @@ void populateAppListWithSizes(AppList *list);
 unsigned long long calculateSingleAppTempFilesSize(const char *titleId);
 unsigned long long cleanSingleAppTempFiles(const char *titleId);
 
-// NEW: DLC and addcont orphan cleaning
 unsigned long long calculateOrphanedDLCDataSize();
 void findOrphanedDLCData();
 unsigned long long calculateOrphanedAddcontSize();
@@ -195,7 +207,6 @@ void findOrphanedLicenseFiles();
 unsigned long long calculateEmptyLiveareaBubblesSize();
 void removeEmptyLiveareaBubbles();
 
-// Preview functions
 FileList* createFileList();
 void freeFileList(FileList *list);
 void addFileToList(FileList *list, const char *path, unsigned long long size);
@@ -204,7 +215,6 @@ void sortFileList(FileList *list, SortMode sortMode);
 void filterAndSortFileList(FileList *list, SortMode sortMode, const char *fileFilter, unsigned long long *totalVisibleSize);
 int deleteSingleFileFromList(FileList *list, int index);
 
-// Emergency stop system functions
 void initEmergencyStop();
 void startOperation();
 void endOperation();
@@ -213,21 +223,21 @@ int isEmergencyStopRequested();
 int isOperationInProgress();
 void cleanupAfterEmergencyStop();
 
-#endif // PSV_CLEANER_CORE_H
+void initScanProgress(int totalItems);
+void updateScanProgress(int currentItem);
+int getScanProgress();
+void resetScanProgress();
 
-// Localization and themes module
+#endif
+
 #define MAX_LANGUAGES 1
 #define LANGUAGE_EN 0
-#define LANGUAGE_IT 1
-#define LANGUAGE_ES 2
-#define LANGUAGE_FR 3
 
 typedef enum {
     THEME_LIGHT = 0,
     THEME_DARK = 1
 } AppTheme;
 
-// Theme colors
 typedef struct {
     int bg_primary;
     int bg_secondary;
@@ -238,23 +248,16 @@ typedef struct {
     int border;
 } ThemeColors;
 
-// Current language and theme
 extern int currentLanguage;
 extern AppTheme currentTheme;
 
-// Theme definitions
 extern ThemeColors themes[2];
 
-// Language arrays - fixed declarations
 extern const char* lang_titles_screen[MAX_LANGUAGES][15];
 extern const char* lang_profile_options[MAX_LANGUAGES][6];
 extern const char* lang_ui_text[MAX_LANGUAGES][30];
 
-// Functions
 const char* L(const char* lang_array[][30], int lang_index, int text_index);
 void detectSystemLanguage();
 void setTheme(AppTheme theme);
 void applyThemeColors(ThemeColors* colors);
-
-// Language detection info
-#define SCE_SYSTEM_PARAM_ID_LANG 0x00000005

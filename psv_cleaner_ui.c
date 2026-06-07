@@ -39,8 +39,8 @@ void addParticle(float x, float y) {
 
     particles[particleCount].x = x;
     particles[particleCount].y = y;
-    particles[particleCount].vx = ((rand() % 100) - 50) * 0.1f;
-    particles[particleCount].vy = -((rand() % 50) + 20) * 0.1f;
+    particles[particleCount].vx = ((rand() % 80) - 40) * 0.08f; // Smoother horizontal velocity
+    particles[particleCount].vy = -((rand() % 40) + 15) * 0.08f; // Smoother vertical velocity
     particles[particleCount].life = 1.0f;
     particles[particleCount].maxLife = 1.0f;
     particles[particleCount].color = RGBA(100 + rand() % 155, 200 + rand() % 55, 255, 255);
@@ -51,13 +51,18 @@ void updateParticles() {
     for (int i = 0; i < particleCount; i++) {
         particles[i].x += particles[i].vx;
         particles[i].y += particles[i].vy;
-        particles[i].vy += 0.1f;
-        particles[i].life -= 0.02f;
+        particles[i].vy += 0.08f; // Slightly reduced gravity for smoother motion
+        particles[i].life -= 0.015f; // Slower decay for longer-lasting particles
 
         if (particles[i].life <= 0) {
             particles[i] = particles[--particleCount];
             i--;
         }
+    }
+    
+    // Limit particle count for performance
+    if (particleCount > MAX_PARTICLES / 2) {
+        particleCount = MAX_PARTICLES / 2;
     }
 }
 
@@ -145,6 +150,15 @@ void drawProgressBar(vita2d_pgf *font, int percent) {
         vita2d_pgf_draw_text(font, 480 - 80, y + 60, RGBA(red, 200, 100, 255), 1.0f, "Finalizing cleanup...");
     }
 
+    // Show detailed progress percentage during scanning
+    int scanProgress = getScanProgress();
+    
+    if (scanProgress > 0 && scanProgress < 100) {
+        char progressText[64];
+        snprintf(progressText, sizeof(progressText), "Scan Progress: %d%%", scanProgress);
+        vita2d_pgf_draw_text(font, 480 - 120, y + 85, RGBA(150, 200, 255, 255), 0.9f, progressText);
+    }
+
     vita2d_draw_rectangle(0, 500, 960, 44, RGBA(15, 25, 40, 220));
 
     if (isEmergencyStopRequested()) {
@@ -182,7 +196,7 @@ void showNotification(const char *title, const char *message) {
     printf("NOTIFICATION: %s - %s\n", title, message);
 }
 
-#define TOTAL_CATEGORIES 28
+#define TOTAL_CATEGORIES 35
 
 typedef struct {
     int selected;
@@ -277,40 +291,82 @@ typedef enum {
 } CleaningProfile;
 
 void syncMenuToGlobals(MenuOptions *menu) {
-    // Original categories (0-6)
     cleanSystem = menu->enabled[0];
     cleanVitaShell = menu->enabled[1];
     cleanRetroArch = menu->enabled[3];
     cleanAdrenaline = menu->enabled[5];
     
-    // Exclusion settings (7, 9, 10, 11)
-    excludePictureFolder = menu->enabled[9];
-    excludeVpkFiles = menu->enabled[10];
-    excludeVitaDBCache = menu->enabled[11];
+    excludePictureFolder = menu->enabled[8];
+    excludeVpkFiles = menu->enabled[9];
+    excludeVitaDBCache = menu->enabled[10];
     
-    // Orphaned data and all apps temp (12, 13)
-    cleanOrphanedData = menu->enabled[12];
-    cleanAllAppsTempFiles = menu->enabled[13];
+    cleanOrphanedData = menu->enabled[11];
+    cleanAllAppsTempFiles = menu->enabled[12];
     
-    // NEW: Additional homebrew/emulators (14-22)
-    cleanEasyVpK = menu->enabled[14];
-    cleanDaemon = menu->enabled[15];
-    cleanVitaGrafix = menu->enabled[16];
-    cleanOneturtle = menu->enabled[17];
-    cleanPCSX = menu->enabled[18];
-    cleanMGBA = menu->enabled[19];
-    cleanFlycast = menu->enabled[20];
-    cleanShellbat = menu->enabled[21];
-    cleanSwitchUser = menu->enabled[22];
+    cleanEasyVpK = menu->enabled[13];
+    cleanDaemon = menu->enabled[14];
+    cleanVitaGrafix = menu->enabled[15];
+    cleanOneturtle = menu->enabled[16];
+    cleanPCSX = menu->enabled[17];
+    cleanMGBA = menu->enabled[18];
+    cleanFlycast = menu->enabled[19];
+    cleanShellbat = menu->enabled[20];
+    cleanSwitchUser = menu->enabled[21];
     
-    // NEW: System categories (23-27)
-    cleanThemeCache = menu->enabled[23];
-    cleanNotificationCache = menu->enabled[24];
-    cleanActivityLog = menu->enabled[25];
-    cleanOrphanedLicenseFiles = menu->enabled[26];
-    cleanOrphanedDLC = menu->enabled[27];
-    
+    cleanBrowser = menu->enabled[27];
+    cleanVHBB = menu->enabled[28];
+    cleanITLS = menu->enabled[29];
+    cleanDownloadEnabler = menu->enabled[30];
+    cleanMoonlight = menu->enabled[31];
+    cleanRetroFlow = menu->enabled[32];
+    cleanOrphanedAddcont = menu->enabled[33];
+    cleanEmptyLiveareaBubbles = menu->enabled[34];
+
+    cleanThemeCache = menu->enabled[22];
+    cleanNotificationCache = menu->enabled[23];
+    cleanActivityLog = menu->enabled[24];
+    cleanOrphanedLicenseFiles = menu->enabled[25];
+    cleanOrphanedDLC = menu->enabled[26];    
     invalidateSpaceCache();
+}
+
+const char* getOptionDescription(int index) {
+    switch(index) {
+        case 0:  return "Deletes temporary files created by the operating system.";
+        case 1:  return "Cleans VitaShell icons, logs, and temporary backups.";
+        case 2:  return "Removes images and data cached by PKGi/PKGj.";
+        case 3:  return "Empties RetroArch shader cache and log files.";
+        case 4:  return "Deletes temporary plugin update and install files.";
+        case 5:  return "Cleans PSP logs and crash dumps from Adrenaline.";
+        case 6:  return "Removes large core dump files (psp2dmp) from the system.";
+        case 7:  return "Toggle all cleaning categories at once.";
+        case 8:  return "Prevents scanning the Pictures and Screenshots folder.";
+        case 9:  return "Do not delete .vpk files found in the root directory.";
+        case 10: return "Keep VitaDB cache to ensure faster app startup.";
+        case 11: return "Scans 'data/' for folders of apps no longer installed.";
+        case 12: return "Cleans internal temp folders of ALL installed apps.";
+        case 13: return "Cleans icons and preview cache used by EasyVPK.";
+        case 14: return "Empties logs from the DAEMON plugin manager.";
+        case 15: return "Removes the configuration cache for VitaGrafix.";
+        case 22: return "Cleans LiveArea theme cache and runtime font data.";
+        case 23: return "Empties the system notification history.";
+        case 24: return "Deletes logs of recent activities (Activity Log).";
+        case 25: return "Removes orphaned .rif licenses from deleted games.";
+        case 26: return "Deletes DLC data left behind after game removal.";
+        case 27: return "Empties Browser history, cookies, and WebKit cache.";
+        case 28: return "Cleans Vita Homebrew Browser temporary data.";
+        case 29: return "Removes iTLS-Enso installation logs.";
+        case 30: return "Cleans Download Enabler plugin cache.";
+        case 31: return "Cleans Moonlight streaming logs and icons.";
+        case 32: return "Empties RetroFlow cover and metadata cache.";
+        case 33: return "Removes orphaned expansion data (addcont).";
+        case 34: return "Deletes bubble folders of apps no longer installed.";
+        default: return "Select an option to view specific details.";
+    }
+}
+
+int isHeader(int index) {
+    return 0;
 }
 
 void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
@@ -318,7 +374,6 @@ void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
     menu->scrollOffset = 0;
     menu->total_options = TOTAL_CATEGORIES;
 
-    // Original categories
     strcpy(menu->options[0], "System Temp Files");
     strcpy(menu->options[1], "VitaShell Cache");
     strcpy(menu->options[2], "PKGi Cache");
@@ -326,35 +381,39 @@ void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
     strcpy(menu->options[4], "Autoplugin Cache");
     strcpy(menu->options[5], "Adrenaline Cache");
     strcpy(menu->options[6], "Crash Dumps");
-    strcpy(menu->options[7], "Exclusion Settings");
-    strcpy(menu->options[8], "All Categories");
-    strcpy(menu->options[9], "Exclude Picture Folder");
-    strcpy(menu->options[10], "Exclude VPK Files");
-    strcpy(menu->options[11], "Exclude VitaDB Cache");
-    strcpy(menu->options[12], "Clean Orphaned App Data");
-    strcpy(menu->options[13], "Clean All Apps Temp Files");
+    strcpy(menu->options[7], "All Categories");
+    strcpy(menu->options[8], "Exclude Picture Folder");
+    strcpy(menu->options[9], "Exclude VPK Files");
+    strcpy(menu->options[10], "Exclude VitaDB Cache");
+    strcpy(menu->options[11], "Clean Orphaned App Data");
+    strcpy(menu->options[12], "Clean All Apps Temp Files");
     
-    // NEW: Additional homebrew/emulators
-    strcpy(menu->options[14], "EasyVPK Cache");
-    strcpy(menu->options[15], "DAEMON Cache");
-    strcpy(menu->options[16], "VitaGrafix Cache");
-    strcpy(menu->options[17], "ONETurtle Cache");
-    strcpy(menu->options[18], "PCSX ReARMed Cache");
-    strcpy(menu->options[19], "MGBA Cache");
-    strcpy(menu->options[20], "Flycast Cache");
-    strcpy(menu->options[21], "Shellbat Cache");
-    strcpy(menu->options[22], "Switch User Cache");
+    strcpy(menu->options[13], "EasyVPK Cache");
+    strcpy(menu->options[14], "DAEMON Cache");
+    strcpy(menu->options[15], "VitaGrafix Cache");
+    strcpy(menu->options[16], "ONETurtle Cache");
+    strcpy(menu->options[17], "PCSX ReARMed Cache");
+    strcpy(menu->options[18], "MGBA Cache");
+    strcpy(menu->options[19], "Flycast Cache");
+    strcpy(menu->options[20], "Shellbat Cache");
+    strcpy(menu->options[21], "Switch User Cache");
     
-    // NEW: System categories
-    strcpy(menu->options[23], "Theme & Font Cache");
-    strcpy(menu->options[24], "Notifications Cache");
-    strcpy(menu->options[25], "Activity Logs");
-    strcpy(menu->options[26], "Orphaned Licenses (.rif)");
-    strcpy(menu->options[27], "Orphaned DLC Data");
+    strcpy(menu->options[22], "Theme & Font Cache");
+    strcpy(menu->options[23], "Notifications Cache");
+    strcpy(menu->options[24], "Activity Logs");
+    strcpy(menu->options[25], "Orphaned Licenses (.rif)");
+    strcpy(menu->options[26], "Orphaned DLC Data");
+    strcpy(menu->options[27], "Browser Cache");
+    strcpy(menu->options[28], "VHBB Cache");
+    strcpy(menu->options[29], "iTLS-Enso Logs");
+    strcpy(menu->options[30], "Download Enabler Cache");
+    strcpy(menu->options[31], "Moonlight Cache");
+    strcpy(menu->options[32], "RetroFlow Cache");
+    strcpy(menu->options[33], "Orphaned Addcont");
+    strcpy(menu->options[34], "Empty Bubbles");
 
     switch (profile) {
         case PROFILE_QUICK:
-            // Enable safe caches only
             for (int i = 0; i < TOTAL_CATEGORIES; i++) {
                 menu->enabled[i] = 0;
             }
@@ -363,22 +422,19 @@ void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
             menu->enabled[3] = 1;  // RetroArch
             menu->enabled[4] = 1;  // Autoplugin
             menu->enabled[5] = 1;  // Adrenaline
-            menu->enabled[7] = 1;  // Exclusion settings header
-            menu->enabled[12] = 0; // Orphaned data off by default
-            menu->enabled[13] = 0; // All apps temp off
-            // All new homebrew enabled by default in quick mode
-            for (int i = 14; i <= 22; i++) menu->enabled[i] = 1;
-            // System caches off in quick mode
-            for (int i = 23; i <= 27; i++) menu->enabled[i] = 0;
+            menu->enabled[11] = 0; // Orphaned data off by default
+            menu->enabled[12] = 0; // All apps temp off
+            for (int i = 13; i <= 21; i++) menu->enabled[i] = 1;
+            for (int i = 22; i <= 26; i++) menu->enabled[i] = 0;
             break;
 
         case PROFILE_COMPLETE:
             for (int i = 0; i < TOTAL_CATEGORIES; i++) {
                 menu->enabled[i] = 1;
             }
-            menu->enabled[9] = 0;  // Exclude pictures
-            menu->enabled[10] = 0; // Exclude VPKs
-            menu->enabled[7] = 1;  // Exclusion settings header
+            menu->enabled[8] = 0;
+            menu->enabled[9] = 0;
+            menu->enabled[10] = 0;
             break;
 
         case PROFILE_SELECTIVE:
@@ -393,75 +449,68 @@ void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
 }
 
 void drawOptionsMenu(vita2d_pgf *font, MenuOptions *menu) {
-    vita2d_draw_rectangle(0, 0, 960, 544, RGBA(10, 15, 25, 200));
+    vita2d_draw_rectangle(0, 0, 960, 544, RGBA(5, 10, 20, 220));
 
-    vita2d_draw_rectangle(100, 60, 760, 450, RGBA(0, 120, 200, 100));
-    vita2d_draw_rectangle(105, 65, 750, 440, RGBA(20, 30, 50, 250));
+    vita2d_draw_rectangle(80, 40, 800, 460, RGBA(0, 120, 200, 80));
+    vita2d_draw_rectangle(85, 45, 790, 450, RGBA(20, 30, 50, 255));
 
-    vita2d_draw_rectangle(105, 65, 750, 50, RGBA(0, 100, 180, 200));
-    vita2d_draw_rectangle(105, 65, 750, 3, RGBA(0, 200, 255, 255));
-    vita2d_pgf_draw_text(font, 480 - 165, 95, RGBA(255, 255, 255, 255), 1.8f, "Advanced Cleaning Options");
+    vita2d_draw_rectangle(85, 45, 790, 50, RGBA(30, 50, 100, 255));
+    vita2d_draw_rectangle(85, 95, 790, 2, RGBA(0, 200, 255, 255));
+    vita2d_pgf_draw_text(font, 480 - 165, 80, RGBA(255, 255, 255, 255), 1.6f, "Advanced Configuration");
 
-    vita2d_pgf_draw_text(font, 480 - 180, 135, RGBA(200, 200, 200, 255), 0.9f, "Select which categories to clean (X to toggle)");
+    vita2d_pgf_draw_text(font, 480 - 180, 125, RGBA(150, 200, 255, 255), 0.9f, "Use X to toggle specific categories");
 
-    vita2d_draw_rectangle(120, 155, 720, 310, RGBA(15, 25, 40, 200));
+    vita2d_draw_rectangle(100, 140, 760, 260, RGBA(10, 20, 35, 255));
 
-    int maxVisible = 8;
+    int maxVisible = 7;
     int startIdx = menu->scrollOffset;
     int endIdx = startIdx + maxVisible;
     if (endIdx > menu->total_options) endIdx = menu->total_options;
 
     for (int i = startIdx; i < endIdx; i++) {
         int displayIndex = i - startIdx;
-        int y = 175 + (displayIndex * 34);
+        int y = 145 + (displayIndex * 34);
         int isSelected = (i == menu->selected);
+        int isAnHeader = isHeader(i);
 
         if (isSelected) {
-            vita2d_draw_rectangle(125, y - 2, 710, 30, RGBA(0, 150, 255, 80));
-            vita2d_draw_rectangle(125, y - 2, 5, 30, RGBA(0, 200, 255, 255));
+            vita2d_draw_rectangle(105, y - 5, 750, 32, RGBA(50, 100, 200, 120));
+            vita2d_draw_rectangle(105, y - 5, 4, 32, RGBA(0, 255, 255, 255));
         }
 
-        int checkboxX = 145;
-        int checkboxY = y + 3;
+        if (i != 7) {
+            int checkboxX = 120;
+            int checkboxY = y + 3;
 
-        vita2d_draw_rectangle(checkboxX, checkboxY, 20, 20, RGBA(40, 60, 80, 255));
-        vita2d_draw_rectangle(checkboxX + 1, checkboxY + 1, 18, 18, RGBA(20, 30, 45, 255));
+            // Cambia il colore di sfondo: Bluastro se attivo, Rosso scuro se disattivato
+            int boxBgColor = menu->enabled[i] ? RGBA(60, 70, 90, 255) : RGBA(100, 40, 40, 255);
+            vita2d_draw_rectangle(checkboxX, checkboxY, 20, 20, boxBgColor);
 
-        int shouldShowChecked = menu->enabled[i];
-        // "All Categories" shows check if all 0-6 are enabled
-        if (i == 8) {
-            shouldShowChecked = 1;
-            for (int j = 0; j < 7; j++) {
-                if (!menu->enabled[j]) {
-                    shouldShowChecked = 0;
-                    break;
-                }
+            if (menu->enabled[i]) {
+                vita2d_draw_rectangle(checkboxX + 4, checkboxY + 4, 12, 12, RGBA(0, 255, 150, 255));
             }
         }
 
-        if (shouldShowChecked) {
-            vita2d_draw_rectangle(checkboxX + 4, checkboxY + 4, 12, 12, RGBA(0, 255, 100, 255));
-            vita2d_draw_rectangle(checkboxX + 5, checkboxY + 5, 10, 10, RGBA(0, 200, 80, 255));
-        }
-
-        int textColor = isSelected ? RGBA(255, 255, 255, 255) : RGBA(200, 200, 200, 255);
-        vita2d_pgf_draw_text(font, 175, y + 18, textColor, 1.1f, menu->options[i]);
-
-        if (i < 7) {
-            vita2d_draw_rectangle(780, y + 6, 35, 16, RGBA(0, 150, 200, 150));
-            const char* sizeIndicators[] = {"~", "~~", "~", "~~", "~", "~~", "~"};
-            vita2d_pgf_draw_text(font, 785, y + 17, RGBA(255, 255, 150, 255), 0.8f, sizeIndicators[i]);
-        }
+        int textColor = isSelected ? RGBA(255, 255, 255, 255) : RGBA(180, 180, 180, 255);
+        if (isAnHeader) textColor = RGBA(255, 255, 100, 255);
+        
+        vita2d_pgf_draw_text(font, 155, y + 18, textColor, 1.0f, menu->options[i]);
     }
 
+    vita2d_draw_rectangle(100, 410, 760, 55, RGBA(15, 25, 45, 255));
+    vita2d_draw_rectangle(100, 410, 760, 2, RGBA(0, 150, 255, 255));
+    vita2d_pgf_draw_text(font, 115, 435, RGBA(200, 200, 200, 255), 0.85f, "Details:");
+    vita2d_pgf_draw_text(font, 115, 458, RGBA(255, 255, 255, 255), 0.85f, getOptionDescription(menu->selected));
+
     if (menu->total_options > maxVisible) {
-        int scrollbarHeight = 300;
-        int scrollbarY = 175;
+        int scrollbarHeight = 260;
+        int scrollbarY = 140;
         int thumbHeight = (maxVisible * scrollbarHeight) / menu->total_options;
         int thumbY = scrollbarY + (menu->scrollOffset * scrollbarHeight) / menu->total_options;
 
-        vita2d_draw_rectangle(850, scrollbarY, 10, scrollbarHeight, RGBA(40, 40, 40, 255));
-        vita2d_draw_rectangle(850, thumbY, 10, thumbHeight, RGBA(100, 150, 200, 255));
+        vita2d_draw_rectangle(862, scrollbarY, 12, scrollbarHeight, RGBA(5, 10, 20, 255));
+        vita2d_draw_rectangle(862, thumbY, 12, thumbHeight, RGBA(0, 255, 255, 255));
+        vita2d_draw_rectangle(862, thumbY, 2, thumbHeight, RGBA(255, 255, 255, 120));
     }
 
     vita2d_draw_rectangle(105, 475, 750, 30, RGBA(15, 25, 40, 220));
@@ -727,7 +776,10 @@ int main() {
         currentFrame++;
 
         if (!showMenu && !showPreview) {
-            updateSpaceCacheIfNeeded(currentFrame);
+            // Only update space cache every 120 frames (2 seconds) to reduce overhead
+            if (currentFrame % 120 == 0) {
+                updateSpaceCacheIfNeeded(currentFrame);
+            }
             unsigned long long currentSpace = g_cachedSpaceSize;
             if (currentSpace != spaceBefore || spaceBefore == 0) {
                 spaceBefore = currentSpace;
@@ -746,13 +798,9 @@ int main() {
         vita2d_start_drawing();
         vita2d_clear_screen();
 
-    for (int y = 0; y < 544; y += 10) {
-        int alpha = 255 - (y * 100) / 544;
-        if (alpha < 150) alpha = 150;
-        vita2d_draw_rectangle(0, y, 960, 10, RGBA(15 + y/40, 20 + y/30, 35 + y/25, alpha));
-    }
+    // Optimized background rendering - use single rectangle instead of 54
+    vita2d_draw_rectangle(0, 0, 960, 544, RGBA(15, 20, 35, 255));
 
-        vita2d_pgf_draw_text(font, 480 - 80, 82, RGBA(0, 0, 0, 150), 2.2f, "PSV Cleaner");
         vita2d_pgf_draw_text(font, 480 - 82, 80, RGBA(100, 200, 255, 255), 2.2f, "PSV Cleaner");
         vita2d_pgf_draw_text(font, 480 - 80, 82, RGBA(255, 255, 255, 255), 2.2f, "PSV Cleaner");
 
@@ -838,7 +886,7 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
             vita2d_draw_rectangle(0, 470, 960, 74, RGBA(15, 25, 40, 200));
             vita2d_draw_rectangle(0, 470, 960, 2, RGBA(0, 150, 255, 255));
 
-            vita2d_pgf_draw_text(font, 30, 495, RGBA(150, 200, 255, 255), 0.9f, "Version 1.12");
+            vita2d_pgf_draw_text(font, 30, 495, RGBA(150, 200, 255, 255), 0.9f, "Version 1.13");
 
             vita2d_pgf_draw_text(font, 30, 520, RGBA(180, 180, 180, 255), 0.85f, "Ready to clean temporary files and optimize your PS Vita");
 
@@ -856,26 +904,33 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
 
         if (showProfileSelect) {
             if (pad.buttons & SCE_CTRL_UP) {
-                selectedProfile = (CleaningProfile)((int)selectedProfile - 1);
-                if ((int)selectedProfile < 0) selectedProfile = PROFILE_SELECTIVE;
+                int p = (int)selectedProfile - 1;
+                if (p < 0) p = 2;
+                selectedProfile = (CleaningProfile)p;
                 sceKernelDelayThread(200 * 1000);
             }
             if (pad.buttons & SCE_CTRL_DOWN) {
-                selectedProfile = (CleaningProfile)((int)selectedProfile + 1);
-                if ((int)selectedProfile > 2) selectedProfile = PROFILE_QUICK;
+                int p = (int)selectedProfile + 1;
+                if (p > 2) p = 0;
+                selectedProfile = (CleaningProfile)p;
                 sceKernelDelayThread(200 * 1000);
             }
             if (pad.buttons & SCE_CTRL_CROSS) {
                 showProfileSelect = 0;
+                initMenuOptions(&menu, selectedProfile); // Inizializza il profilo scelto
 
-                if (selectedProfile == PROFILE_COMPLETE) {
+                if (selectedProfile == PROFILE_SELECTIVE) {
+                    // Selective Clean: vai direttamente alle opzioni avanzate
+                    showMenu = 1;
+                } else {
+                    // Quick Clean e Complete Clean: vai alla Preview
                     showPreview = 1;
                     preview.scrollOffset = 0;
                     preview.selectedFile = 0;
 
                     vita2d_start_drawing();
                     vita2d_clear_screen();
-                    vita2d_draw_rectangle(0, 0, 960, 544, RGBA(15, 25, 40, 255));
+                    vita2d_draw_rectangle(0, 0, 960, 544, RGBA(15, 20, 35, 255));
                     vita2d_pgf_draw_text(font, 480 - 100, 272, RGBA(255, 255, 100, 255), 1.3f, "Scanning files...");
                     vita2d_end_drawing();
                     vita2d_swap_buffers();
@@ -885,8 +940,6 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
                         scanFilesForPreview(preview.fileList);
                         filterAndSortFileList(preview.fileList, preview.sortMode, preview.fileFilter, &preview.totalVisibleSize);
                     }
-                } else {
-                    initMenuOptions(&menu, selectedProfile);
                 }
 
                 sceKernelDelayThread(200 * 1000);
@@ -1224,30 +1277,33 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
             if (pad.buttons & SCE_CTRL_UP) {
                 if (menu.selected > 0) {
                     menu.selected--;
-                    if (menu.selected < menu.scrollOffset) {
+                    if (menu.selected < menu.scrollOffset && menu.scrollOffset > 0) {
                         menu.scrollOffset = menu.selected;
                     }
                 }
-                sceKernelDelayThread(200 * 1000);
+                // Ensure selected stays within valid bounds
+                if (menu.selected < 0) menu.selected = 0;
+                if (menu.selected >= menu.total_options) menu.selected = menu.total_options - 1;
+                sceKernelDelayThread(150 * 1000); // Reduced delay for snappier response
             }
             if (pad.buttons & SCE_CTRL_DOWN) {
                 if (menu.selected < menu.total_options - 1) {
                     menu.selected++;
-                    int maxVisible = 8;
+                    int maxVisible = 7;
                     if (menu.selected >= menu.scrollOffset + maxVisible) {
                         menu.scrollOffset = menu.selected - maxVisible + 1;
                     }
                 }
-                sceKernelDelayThread(200 * 1000);
+                // Ensure selected stays within valid bounds
+                if (menu.selected < 0) menu.selected = 0;
+                if (menu.selected >= menu.total_options) menu.selected = menu.total_options - 1;
+                sceKernelDelayThread(150 * 1000); // Reduced delay for snappier response
             }
             if (pad.buttons & SCE_CTRL_CROSS) {
-                if (menu.selected == 8) {
-                    // "All Categories" - toggle all
-                    for (int i = 0; i < 7; i++) {
-                        menu.enabled[i] = 1;
-                    }
-                    for (int i = 14; i < TOTAL_CATEGORIES; i++) {
-                        menu.enabled[i] = 1;
+                if (menu.selected == 7) {
+                    int targetState = !menu.enabled[0]; 
+                    for (int i = 0; i < TOTAL_CATEGORIES; i++) {
+                        if (i != 7) menu.enabled[i] = targetState;
                     }
                     syncMenuToGlobals(&menu);
                 } else if (menu.selected >= 0 && menu.selected < TOTAL_CATEGORIES) {

@@ -16,7 +16,12 @@ int g_operationInProgress = 0;
 unsigned long long g_cachedSpaceSize = 0;
 int g_spaceCalculationNeeded = 1;
 int g_lastCalculationFrame = 0;
-#define CALCULATION_INTERVAL_FRAMES 60 
+#define CALCULATION_INTERVAL_FRAMES 60
+
+// Scanning progress tracking
+int g_scanProgress = 0;
+int g_totalScanItems = 0;
+int g_currentScanItem = 0; 
 
 // Exclusion settings
 int excludePictureFolder = 0;
@@ -46,6 +51,11 @@ int cleanITLS = 1;
 int cleanVHBB = 1;
 int cleanPSVitaDB = 1;
 int cleanDownloadEnabler = 1;
+int cleanMoonlight = 1;
+int cleanRetroFlow = 1;
+int cleanHenkaku = 1;
+int cleanPSVshell = 1;
+int cleanCheatTools = 1;
 
 // NEW: Additional system cleaning categories
 int cleanThemeCache = 1;
@@ -82,7 +92,6 @@ typedef struct {
 } ScanCache;
 
 const char *TEMP_PATHS[] = {
-    // --- System temp files ---
     "ux0:temp/",
     "ux0:data/temp/",
     "ux0:cache/",
@@ -91,7 +100,6 @@ const char *TEMP_PATHS[] = {
     "ur0:temp/sqlite/",
     "uma0:temp/",
     
-    // --- VitaShell ---
     "ux0:VitaShell/cache/",
     "ux0:VitaShell/temp/",
     "ux0:VitaShell/log/",
@@ -99,7 +107,6 @@ const char *TEMP_PATHS[] = {
     "ux0:VitaShell/backup/temp/",
     "ux0:VitaShell/trash/",
     
-    // --- PKGi ---
     "ux0:pkgi/tmp/",
     "ux0:pkgi/cache/",
     "ux0:pkgi/log.txt",
@@ -107,16 +114,13 @@ const char *TEMP_PATHS[] = {
     "ux0:pkgi/backup/temp/",
     "ux0:pkgi/*.vpk",
     
-    // --- PKGj ---
     "ux0:pkgj/tmp/",
     "ux0:pkgj/cache/",
     "ux0:pkgj/log.txt",
     "ux0:pkgj/downloads/temp/",
     
-    // --- VPK files on root ---
     "ux0:*.vpk",
     
-    // --- RetroArch ---
     "ux0:data/retroarch/cache/",
     "ux0:data/retroarch/logs/",
     "ux0:data/retroarch/temp/",
@@ -124,66 +128,53 @@ const char *TEMP_PATHS[] = {
     "ux0:data/retroarch/shaders/cache/",
     "ux0:data/retroarch/database/rdb/temp/",
     
-    // --- PSP emu ---
     "ux0:pspemu/temp/",
     "ux0:pspemu/cache/",
     
-    // --- Adrenaline ---
     "ux0:data/Adrenaline/cache/",
     "ux0:data/Adrenaline/logs/",
     "ux0:data/Adrenaline/temp/",
     "ux0:data/Adrenaline/crash/",
     "ux0:data/Adrenaline/dumps/",
     
-    // --- Moonlight ---
     "ux0:data/moonlight/cache/",
     "ux0:data/moonlight/logs/",
     
-    // --- AutoPlugin & AUTOPLUGIN2 ---
     "ux0:data/AutoPlugin/cache/",
     "ux0:data/AutoPlugin/logs/",
     "ux0:data/AUTOPLUGIN2/cache/",
     "ux0:data/AUTOPLUGIN2/logs/",
     
-    // --- RetroFlow ---
     "ux0:data/RetroFlow/CACHE/",
     
-    // --- Henkaku ---
     "ux0:data/henkaku/cache/",
     "ux0:data/henkaku/logs/",
     
-    // --- PSVshell ---
     "ux0:data/PSVshell/logs/",
     "ux0:data/PSVshell/cache/",
     
-    // --- SaveManager, cheats ---
     "ux0:data/savemgr/log/",
     "ux0:data/vitacheat/logs/",
     "ux0:data/rinCheat/logs/",
     
-    // --- VitaDB ---
     "ux0:data/VitaDB/temp.tmp",
     "ux0:vdb_data/",
     "ux0:data/vdb_vpk/",
     
-    // --- Browser & WebKit ---
     "ux0:data/browser/cache/",
     "ux0:data/browser/temp/",
     "ux0:data/browser/logs/",
     "ux0:data/webkit/cache/",
     "ux0:data/webkit/localstorage/temp/",
     
-    // --- Network temp ---
     "ux0:data/net/temp/",
     
-    // --- Downloads & BGDL ---
     "ux0:download/",
     "ux0:download/temp/",
     "ux0:downloads/",
     "ux0:downloads/temp/",
     "ux0:bgdl/t/",
     
-    // --- Package install temp ---
     "ux0:data/pkg/temp/",
     "ux0:package/temp/",
     "ux0:appmeta/temp/",
@@ -192,21 +183,17 @@ const char *TEMP_PATHS[] = {
     "ux0:patch_temp/",
     "ux0:update_temp/",
     
-    // --- Media thumbnails ---
     "ux0:picture/.thumbnails/",
     "ux0:picture/SCREENSHOT/",
     "ux0:video/.thumbnails/",
     "ux0:music/.cache/",
     "ux0:photo/cache/",
     
-    // --- Shader logs ---
     "ux0:shaderlog/",
     
-    // --- Generic cache/log ---
     "ux0:data/logs/temp/",
     "ux0:data/cache/",
     
-    // --- uma0 mirrors ---
     "uma0:cache/",
     "uma0:log/",
     "uma0:data/temp/",
@@ -252,7 +239,6 @@ const char *TEMP_PATHS[] = {
     "uma0:appmeta/temp/",
     "uma0:data/logs/temp/",
     
-    // --- Crash dumps ---
     "ux0:data/psp2core*",
     "ux0:data/*.psp2core",
     "ux0:data/psp2dmp*",
@@ -262,123 +248,59 @@ const char *TEMP_PATHS[] = {
     "ux0:data/psp2core",
     "ux0:data/psp2dmp",
     
-    // ========== NEW: EMULATORS ==========
-    
-    // --- MGBA ---
-    "ux0:data/mgba/cache/",
     "ux0:data/mgba/logs/",
     "uma0:data/mgba/cache/",
     "uma0:data/mgba/logs/",
     
-    // --- PCSX ReARMed (PS1) ---
-    "ux0:data/pcsx_rearmed/cache/",
     "ux0:data/pcsx_rearmed/logs/",
     "uma0:data/pcsx_rearmed/cache/",
     "uma0:data/pcsx_rearmed/logs/",
     
-    // --- Flycast (Dreamcast) ---
-    "ux0:data/flycast/cache/",
     "ux0:data/flycast/logs/",
     "ux0:data/flycast/temp/",
     "uma0:data/flycast/cache/",
     "uma0:data/flycast/logs/",
     "uma0:data/flycast/temp/",
     
-    // --- VitaQuake series ---
-    "ux0:data/vitaquake/cache/",
     "ux0:data/vitaquake/logs/",
     "uma0:data/vitaquake/cache/",
     "uma0:data/vitaquake/logs/",
     
-    // ========== NEW: HOMEBREW ==========
+    "ux0:data/EasyVPK/cache/",
+    "ux0:data/EasyVPK/temp/",
     
-    // --- EasyVPK ---
-    "ux0:easyvpk/cache/",
-    "ux0:easyvpk/temp/",
-    "uma0:easyvpk/cache/",
-    "uma0:easyvpk/temp/",
-    
-    // --- DAEMON (Plugin Manager) ---
-    "ux0:data/DAEMON/cache/",
     "ux0:data/DAEMON/logs/",
     "uma0:data/DAEMON/cache/",
     "uma0:data/DAEMON/logs/",
     
-    // --- iTLS-Enso ---
-    "ux0:data/iTLS/cache/",
     "uma0:data/iTLS/cache/",
     
-    // --- Download Enabler ---
-    "ux0:data/DE/cache/",
     "uma0:data/DE/cache/",
     
-    // --- ONETurtle (Music Player) ---
-    "ux0:data/ONETurtle/cache/",
     "uma0:data/ONETurtle/cache/",
     
-    // --- Shellbat ---
-    "ux0:data/shellbat/cache/",
     "uma0:data/shellbat/cache/",
     
-    // --- Switch User ---
-    "ux0:data/switchuser/cache/",
     "uma0:data/switchuser/cache/",
     
-    // --- PSVitaDB (browser) ---
-    "ux0:data/PSVitaDB/cache/",
     "uma0:data/PSVitaDB/cache/",
     
-    // --- VitaGrafix Config ---
-    "ux0:data/VitaGrafix/cache/",
     "uma0:data/VitaGrafix/cache/",
     
-    // --- VHBB (Vita Homebrew Browser) ---
-    "ux0:VHBB/cache/",
     "ux0:VHBB/temp/",
     "uma0:VHBB/cache/",
     "uma0:VHBB/temp/",
     
-    // ========== NEW: SYSTEM CATEGORIES ==========
+    "ur0:shell/theme/cache/",
+    "ux0:data/theme/temp/",
     
-    // --- Theme cache ---
-    "ux0:theme/cache/",
-    "ur0:theme/cache/",
-    "uma0:theme/cache/",
-    
-    // --- Screenshots temp ---
-    "ux0:screenshot/temp/",
-    
-    // --- Save data backup temp ---
-    "ux0:user/00/savedata_backup/temp/",
-    
-    // --- NPDRM license cache ---
-    "ux0:license/cache/",
     "ur0:license/cache/",
     
-    // --- Registry / config temp ---
-    "ur0:config/license/",
     "ur0:config/np/",
     
-    // --- Network config cache ---
-    "ur0:config/net/cache/",
-    
-    // --- Notification cache ---
-    "ux0:data/notification/cache/",
-    
-    // --- Activity log ---
-    "ux0:data/activity/cache/",
-    
-    // --- Photo import temp ---
-    "ux0:data/photoutils/cache/",
-    
-    // --- Music import temp ---
-    "ux0:data/music_utility/cache/",
-    
-    // --- SceShell cache (LiveArea) ---
-    "ux0:data/shell/cache/",
-    
-    // --- Font cache ---
-    "ux0:data/font/cache/"
+    "ur0:temp/font/",
+    "ux0:data/font/cache/",
+    "ux0:data/activity/cache/"
 };
 
 const size_t TEMP_PATHS_COUNT = sizeof(TEMP_PATHS)/sizeof(TEMP_PATHS[0]);
@@ -431,7 +353,7 @@ const char* lang_ui_text[MAX_LANGUAGES][30] = {
         "Space to free:", "Space Freed:", "Files Deleted:",
         "D-Pad: Navigate | X: Select Profile | O: Exit",
         "Cleanup #", "No temporary files found!",
-        "System Ready", "Version 1.12"
+        "System Ready", "Version 1.13"
     }
 };
 
@@ -506,9 +428,51 @@ int isOperationInProgress() {
 }
 
 void cleanupAfterEmergencyStop() {
+    // Reset emergency stop flags
     g_emergencyStop = 0;
     g_operationInProgress = 0;
+    
+    // Invalidate space cache to ensure fresh calculation after interruption
+    invalidateSpaceCache();
+    
+    // Clear scan cache to prevent stale data
+    clearScanCache();
+    
+    // Reset deleted files counter for accurate tracking
+    resetDeletedFilesCount();
+    
+    // Reset scan progress
+    resetScanProgress();
+    
+    // Ensure all I/O operations are completed
     sceKernelDelayThread(500 * 1000);
+    
+    
+}
+
+void initScanProgress(int totalItems) {
+    g_totalScanItems = totalItems;
+    g_currentScanItem = 0;
+    g_scanProgress = 0;
+}
+
+void updateScanProgress(int currentItem) {
+    g_currentScanItem = currentItem;
+    if (g_totalScanItems > 0) {
+        g_scanProgress = (g_currentScanItem * 100) / g_totalScanItems;
+    } else {
+        g_scanProgress = 0;
+    }
+}
+
+int getScanProgress() {
+    return g_scanProgress;
+}
+
+void resetScanProgress() {
+    g_scanProgress = 0;
+    g_currentScanItem = 0;
+    g_totalScanItems = 0;
 }
 
 void resetDeletedFilesCount() {
@@ -800,37 +764,64 @@ unsigned long long calculateTempSize() {
         }
     }
 
+    // Initialize scan progress tracking
+    initScanProgress(TEMP_PATHS_COUNT);
+
     for(size_t i = 0; i < TEMP_PATHS_COUNT; i++){
+        if (isEmergencyStopRequested()) break;
         
         if (excludePictureFolder && strncmp(TEMP_PATHS[i], "ux0:picture/", 12) == 0) {
+            updateScanProgress(i + 1);
             continue;
         }
         
         if (excludeVpkFiles && strstr(TEMP_PATHS[i], ".vpk") != NULL) {
+            updateScanProgress(i + 1);
             continue;
         }
         
         if (excludeVitaDBCache && strncmp(TEMP_PATHS[i], "ux0:data/VitaDB/", 17) == 0) {
+            updateScanProgress(i + 1);
             continue;
         }
         
         if (!cleanVitaShell && strstr(TEMP_PATHS[i], "VitaShell/")) {
+            updateScanProgress(i + 1);
             continue;
         }
         if (!cleanRetroArch && strstr(TEMP_PATHS[i], "retroarch/")) {
+            updateScanProgress(i + 1);
             continue;
         }
         if (!cleanAdrenaline && strstr(TEMP_PATHS[i], "Adrenaline/")) {
+            updateScanProgress(i + 1);
             continue;
         }
         if (!cleanBrowser && (strstr(TEMP_PATHS[i], "browser/") || strstr(TEMP_PATHS[i], "webkit/"))) {
+            updateScanProgress(i + 1);
             continue;
         }
         
-        if (!cleanSystem && (strstr(TEMP_PATHS[i], "ux0:temp/") || strstr(TEMP_PATHS[i], "ux0:cache/") || strstr(TEMP_PATHS[i], "ux0:log/") ||
-            strstr(TEMP_PATHS[i], "AutoPlugin/") || strstr(TEMP_PATHS[i], "AUTOPLUGIN2/"))) {
-            continue;
-        }
+        if (!cleanSystem && (strstr(TEMP_PATHS[i], "temp/") || strstr(TEMP_PATHS[i], "cache/") || strstr(TEMP_PATHS[i], "log/") || strstr(TEMP_PATHS[i], "AutoPlugin/"))) continue;
+        if (!cleanVitaShell && strstr(TEMP_PATHS[i], "VitaShell/")) continue;
+        if (!cleanRetroArch && strstr(TEMP_PATHS[i], "retroarch/")) continue;
+        if (!cleanAdrenaline && (strstr(TEMP_PATHS[i], "Adrenaline/") || strstr(TEMP_PATHS[i], "pspemu/"))) continue;
+        if (!cleanBrowser && (strstr(TEMP_PATHS[i], "browser/") || strstr(TEMP_PATHS[i], "webkit/"))) continue;
+        if (!cleanEasyVpK && strstr(TEMP_PATHS[i], "EasyVPK/")) continue;
+        if (!cleanDaemon && strstr(TEMP_PATHS[i], "DAEMON/")) continue;
+        if (!cleanVitaGrafix && strstr(TEMP_PATHS[i], "VitaGrafix/")) continue;
+        if (!cleanMGBA && strstr(TEMP_PATHS[i], "mgba/")) continue;
+        if (!cleanPCSX && strstr(TEMP_PATHS[i], "pcsx_rearmed/")) continue;
+        if (!cleanFlycast && strstr(TEMP_PATHS[i], "flycast/")) continue;
+        if (!cleanMoonlight && strstr(TEMP_PATHS[i], "moonlight/")) continue;
+        if (!cleanRetroFlow && strstr(TEMP_PATHS[i], "RetroFlow/")) continue;
+        if (!cleanHenkaku && (strstr(TEMP_PATHS[i], "henkaku/") || strstr(TEMP_PATHS[i], "tai/"))) continue;
+        if (!cleanPSVshell && strstr(TEMP_PATHS[i], "PSVshell/")) continue;
+        if (!cleanVHBB && strstr(TEMP_PATHS[i], "VHBB/")) continue;
+        if (!cleanITLS && strstr(TEMP_PATHS[i], "iTLS/")) continue;
+        if (!cleanDownloadEnabler && strstr(TEMP_PATHS[i], "DE/")) continue;
+        if (!cleanThemeCache && (strstr(TEMP_PATHS[i], "theme/") || strstr(TEMP_PATHS[i], "font/"))) continue;
+        if (!cleanCheatTools && (strstr(TEMP_PATHS[i], "vitacheat/") || strstr(TEMP_PATHS[i], "rinCheat/") || strstr(TEMP_PATHS[i], "savemgr/"))) continue;
 
         unsigned long long pathSize = 0;
 
@@ -845,6 +836,7 @@ unsigned long long calculateTempSize() {
         }
 
         total += pathSize;
+        updateScanProgress(i + 1);
     }
 
     if (newCache) {
@@ -1131,7 +1123,7 @@ void getInstalledAppsList(char ***apps, int *count) {
 }
 
 int isAppInstalled(const char *title_id) {
-    if (!title_id || !is_safe_path(title_id) || strlen(title_id) != 9) {
+    if (!title_id || strlen(title_id) != 9) {
         return 0;
     }
 
@@ -1349,6 +1341,37 @@ void scanFilesForPreview(FileList *list) {
     if (!list) return;
 
     for(size_t i=0; i<TEMP_PATHS_COUNT; i++){
+        // Apply exclusion settings before scanning
+        if (excludePictureFolder && strncmp(TEMP_PATHS[i], "ux0:picture/", 12) == 0) {
+            continue;
+        }
+        
+        if (excludeVpkFiles && strstr(TEMP_PATHS[i], ".vpk") != NULL) {
+            continue;
+        }
+        
+        if (excludeVitaDBCache && strncmp(TEMP_PATHS[i], "ux0:data/VitaDB/", 17) == 0) {
+            continue;
+        }
+        
+        if (!cleanVitaShell && strstr(TEMP_PATHS[i], "VitaShell/")) {
+            continue;
+        }
+        if (!cleanRetroArch && strstr(TEMP_PATHS[i], "retroarch/")) {
+            continue;
+        }
+        if (!cleanAdrenaline && strstr(TEMP_PATHS[i], "Adrenaline/")) {
+            continue;
+        }
+        if (!cleanBrowser && (strstr(TEMP_PATHS[i], "browser/") || strstr(TEMP_PATHS[i], "webkit/"))) {
+            continue;
+        }
+        
+        if (!cleanSystem && (strstr(TEMP_PATHS[i], "ux0:temp/") || strstr(TEMP_PATHS[i], "ux0:cache/") || strstr(TEMP_PATHS[i], "ux0:log/") ||
+            strstr(TEMP_PATHS[i], "AutoPlugin/") || strstr(TEMP_PATHS[i], "AUTOPLUGIN2/"))) {
+            continue;
+        }
+        
         scanPathForPreview(list, TEMP_PATHS[i]);
     }
 
@@ -1972,7 +1995,6 @@ unsigned long long calculateOrphanedLicenseFilesSize() {
         int len = strlen(filename);
 
         if (len > 4 && strcmp(filename + len - 4, ".rif") == 0) {
-            // RIF licenses can be: 16-char hex or TitleID-based
             char fullPath[MAX_PATH_LENGTH];
             safe_snprintf(fullPath, sizeof(fullPath), "ux0:license/%s", filename);
         }
@@ -1983,8 +2005,6 @@ unsigned long long calculateOrphanedLicenseFilesSize() {
 }
 
 void findOrphanedLicenseFiles() {
-    if (!cleanOrphanedLicenseFiles) return;
-
     SceUID dfd = sceIoDopen("ux0:license/");
     if (dfd < 0) return;
 
@@ -1993,7 +2013,6 @@ void findOrphanedLicenseFiles() {
 
     while (sceIoDread(dfd, &dir) > 0) {
         if (SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
-
         char* filename = dir.d_name;
         int len = strlen(filename);
 
@@ -2011,8 +2030,6 @@ void findOrphanedLicenseFiles() {
                     isOrphaned = 1;
                 }
             } else if (len == 16) {
-                // 16-char hex licenses (NPDRM) - check if any app references them
-                // For safety, only remove if older than 60 days
                 SceIoStat stat;
                 if (sceIoGetstat(fullPath, &stat) >= 0) {
                     SceDateTime now, modTime;
