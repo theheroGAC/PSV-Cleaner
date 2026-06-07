@@ -27,6 +27,7 @@ int g_currentScanItem = 0;
 int excludePictureFolder = 0;
 int excludeVpkFiles = 0;
 int excludeVitaDBCache = 0;
+int excludeVideoFolder = 0;
 
 // Selective app cleaning settings
 int cleanVitaShell = 1;
@@ -791,6 +792,11 @@ unsigned long long calculateTempSize() {
             continue;
         }
         
+        if (excludeVideoFolder && strncmp(TEMP_PATHS[i], "ux0:video/", 10) == 0) {
+            updateScanProgress(i + 1);
+            continue;
+        }
+        
         if (excludeVpkFiles && strstr(TEMP_PATHS[i], ".vpk") != NULL) {
             updateScanProgress(i + 1);
             continue;
@@ -823,6 +829,7 @@ unsigned long long calculateTempSize() {
         if (!cleanRetroArch && strstr(TEMP_PATHS[i], "retroarch/")) continue;
         if (!cleanAdrenaline && (strstr(TEMP_PATHS[i], "Adrenaline/") || strstr(TEMP_PATHS[i], "pspemu/"))) continue;
         if (!cleanBrowser && (strstr(TEMP_PATHS[i], "browser/") || strstr(TEMP_PATHS[i], "webkit/"))) continue;
+        if (excludeVideoFolder && strstr(TEMP_PATHS[i], "video/")) continue;
         if (!cleanEasyVpK && strstr(TEMP_PATHS[i], "EasyVPK/")) continue;
         if (!cleanDaemon && strstr(TEMP_PATHS[i], "DAEMON/")) continue;
         if (!cleanVitaGrafix && strstr(TEMP_PATHS[i], "VitaGrafix/")) continue;
@@ -889,6 +896,10 @@ unsigned long long cleanTemporaryFiles() {
     for(size_t i=0;i<TEMP_PATHS_COUNT;i++){
         
         if (excludePictureFolder && strncmp(TEMP_PATHS[i], "ux0:picture/", 12) == 0) {
+            continue;
+        }
+        
+        if (excludeVideoFolder && strncmp(TEMP_PATHS[i], "ux0:video/", 10) == 0) {
             continue;
         }
         
@@ -1358,6 +1369,10 @@ void scanFilesForPreview(FileList *list) {
             continue;
         }
         
+        if (excludeVideoFolder && strncmp(TEMP_PATHS[i], "ux0:video/", 10) == 0) {
+            continue;
+        }
+        
         if (excludeVpkFiles && strstr(TEMP_PATHS[i], ".vpk") != NULL) {
             continue;
         }
@@ -1383,6 +1398,7 @@ void scanFilesForPreview(FileList *list) {
             strstr(TEMP_PATHS[i], "AutoPlugin/") || strstr(TEMP_PATHS[i], "AUTOPLUGIN2/"))) {
             continue;
         }
+        if (excludeVideoFolder && strstr(TEMP_PATHS[i], "video/")) continue;
         
         scanPathForPreview(list, TEMP_PATHS[i]);
     }

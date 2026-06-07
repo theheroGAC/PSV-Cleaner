@@ -123,6 +123,7 @@ extern int g_currentScanItem;
 extern int excludePictureFolder;
 extern int excludeVpkFiles;
 extern int excludeVitaDBCache;
+extern int excludeVideoFolder;
 
 extern int cleanVitaShell;
 extern int cleanRetroArch;

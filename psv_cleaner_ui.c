@@ -150,15 +150,6 @@ void drawProgressBar(vita2d_pgf *font, int percent) {
         vita2d_pgf_draw_text(font, 480 - 80, y + 60, RGBA(red, 200, 100, 255), 1.0f, "Finalizing cleanup...");
     }
 
-    // Show detailed progress percentage during scanning
-    int scanProgress = getScanProgress();
-    
-    if (scanProgress > 0 && scanProgress < 100) {
-        char progressText[64];
-        snprintf(progressText, sizeof(progressText), "Scan Progress: %d%%", scanProgress);
-        vita2d_pgf_draw_text(font, 480 - 120, y + 85, RGBA(150, 200, 255, 255), 0.9f, progressText);
-    }
-
     vita2d_draw_rectangle(0, 500, 960, 44, RGBA(15, 25, 40, 220));
 
     if (isEmergencyStopRequested()) {
@@ -196,7 +187,7 @@ void showNotification(const char *title, const char *message) {
     printf("NOTIFICATION: %s - %s\n", title, message);
 }
 
-#define TOTAL_CATEGORIES 35
+#define TOTAL_CATEGORIES 36
 
 typedef struct {
     int selected;
@@ -299,6 +290,7 @@ void syncMenuToGlobals(MenuOptions *menu) {
     excludePictureFolder = menu->enabled[8];
     excludeVpkFiles = menu->enabled[9];
     excludeVitaDBCache = menu->enabled[10];
+    excludeVideoFolder = menu->enabled[35];
     
     cleanOrphanedData = menu->enabled[11];
     cleanAllAppsTempFiles = menu->enabled[12];
@@ -361,6 +353,7 @@ const char* getOptionDescription(int index) {
         case 32: return "Empties RetroFlow cover and metadata cache.";
         case 33: return "Removes orphaned expansion data (addcont).";
         case 34: return "Deletes bubble folders of apps no longer installed.";
+        case 35: return "Prevents scanning the Video thumbnails folder.";
         default: return "Select an option to view specific details.";
     }
 }
@@ -411,6 +404,7 @@ void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
     strcpy(menu->options[32], "RetroFlow Cache");
     strcpy(menu->options[33], "Orphaned Addcont");
     strcpy(menu->options[34], "Empty Bubbles");
+    strcpy(menu->options[35], "Exclude Video Folder");
 
     switch (profile) {
         case PROFILE_QUICK:
@@ -432,7 +426,8 @@ void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
             for (int i = 0; i < TOTAL_CATEGORIES; i++) {
                 menu->enabled[i] = 1;
             }
-            menu->enabled[8] = 0;
+            menu->enabled[8] = 1; 
+            menu->enabled[35] = 1; 
             menu->enabled[9] = 0;
             menu->enabled[10] = 0;
             break;
@@ -1105,6 +1100,9 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
                 if (preview.fileList && preview.fileList->count > 0) {
                     showPreview = 0;
 
+                    // Reset progress variables to avoid conflicts
+                    resetScanProgress();
+
                     startOperation();
 
                     int cleaningInterrupted = 0;
@@ -1281,10 +1279,10 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
                         menu.scrollOffset = menu.selected;
                     }
                 }
-                // Ensure selected stays within valid bounds
+                
                 if (menu.selected < 0) menu.selected = 0;
                 if (menu.selected >= menu.total_options) menu.selected = menu.total_options - 1;
-                sceKernelDelayThread(150 * 1000); // Reduced delay for snappier response
+                sceKernelDelayThread(150 * 1000); 
             }
             if (pad.buttons & SCE_CTRL_DOWN) {
                 if (menu.selected < menu.total_options - 1) {
@@ -1294,10 +1292,10 @@ vita2d_pgf_draw_text(font, 285, 408, RGBA(255, 255, 255, 255), 0.9f, L(lang_ui_t
                         menu.scrollOffset = menu.selected - maxVisible + 1;
                     }
                 }
-                // Ensure selected stays within valid bounds
+                
                 if (menu.selected < 0) menu.selected = 0;
                 if (menu.selected >= menu.total_options) menu.selected = menu.total_options - 1;
-                sceKernelDelayThread(150 * 1000); // Reduced delay for snappier response
+                sceKernelDelayThread(150 * 1000); 
             }
             if (pad.buttons & SCE_CTRL_CROSS) {
                 if (menu.selected == 7) {
