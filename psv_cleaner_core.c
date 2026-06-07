@@ -663,29 +663,38 @@ void cleanupVpkFiles() {
 
 void deleteRecursive(const char *path) {
     SceUID dfd;
-    SceIoDirent dir;
-    memset(&dir, 0, sizeof(SceIoDirent));
     dfd = sceIoDopen(path);
     if (dfd >= 0) {
-        while (sceIoDread(dfd, &dir) > 0) {
+        SceIoDirent *dir = malloc(sizeof(SceIoDirent));
+        if (!dir) {
+            sceIoDclose(dfd);
+            return;
+        }
 
-            char newPath[1024];
-            snprintf(newPath, sizeof(newPath), "%s%s%s", path,
+        while (sceIoDread(dfd, dir) > 0) {
+            if (strcmp(dir->d_name, ".") == 0 || strcmp(dir->d_name, "..") == 0)
+                continue;
+
+            char *newPath = malloc(MAX_PATH_LENGTH);
+            if (!newPath) continue;
+
+            snprintf(newPath, MAX_PATH_LENGTH, "%s%s%s", path,
                      (path[strlen(path)-1] == '/') ? "" : "/",
-                     dir.d_name);
-            if (SCE_S_ISDIR(dir.d_stat.st_mode)) {
-                if (strcmp(dir.d_name, ".") && strcmp(dir.d_name, "..")) {
-                    deleteRecursive(newPath);
-                    sceIoRmdir(newPath);
-                }
+                     dir->d_name);
+
+            if (SCE_S_ISDIR(dir->d_stat.st_mode)) {
+                deleteRecursive(newPath);
+                sceIoRmdir(newPath);
             } else {
                 if (sceIoRemove(newPath) >= 0) {
                     g_deletedFilesCount++;
                 }
             }
+            free(newPath);
         }
         sceIoDclose(dfd);
         sceIoRmdir(path);
+        free(dir);
     } else {
         if (sceIoRemove(path) >= 0) {
             g_deletedFilesCount++;
@@ -696,27 +705,34 @@ void deleteRecursive(const char *path) {
 unsigned long long calculateTempSizeRecursive(const char *path) {
     unsigned long long total = 0;
     SceUID dfd;
-    SceIoDirent dir;
-    memset(&dir, 0, sizeof(SceIoDirent));
-
     dfd = sceIoDopen(path);
     if (dfd >= 0) {
-        while (sceIoDread(dfd, &dir) > 0) {
-            if (strcmp(dir.d_name, ".") == 0 || strcmp(dir.d_name, "..") == 0)
+        SceIoDirent *dir = malloc(sizeof(SceIoDirent));
+        if (!dir) {
+            sceIoDclose(dfd);
+            return 0;
+        }
+
+        while (sceIoDread(dfd, dir) > 0) {
+            if (strcmp(dir->d_name, ".") == 0 || strcmp(dir->d_name, "..") == 0)
                 continue;
 
-            char newPath[1024];
-            snprintf(newPath, sizeof(newPath), "%s%s%s", path,
-                     (path[strlen(path)-1] == '/') ? "" : "/",
-                     dir.d_name);
+            char *newPath = malloc(MAX_PATH_LENGTH);
+            if (!newPath) continue;
 
-            if (SCE_S_ISDIR(dir.d_stat.st_mode)) {
+            snprintf(newPath, MAX_PATH_LENGTH, "%s%s%s", path,
+                     (path[strlen(path)-1] == '/') ? "" : "/",
+                     dir->d_name);
+
+            if (SCE_S_ISDIR(dir->d_stat.st_mode)) {
                 total += calculateTempSizeRecursive(newPath);
             } else {
-                total += dir.d_stat.st_size;
+                total += dir->d_stat.st_size;
             }
+            free(newPath);
         }
         sceIoDclose(dfd);
+        free(dir);
     } else {
         SceIoStat stat;
         if (sceIoGetstat(path, &stat) >= 0) {
@@ -862,8 +878,6 @@ unsigned long long calculateTempSize() {
 unsigned long long cleanTemporaryFiles() {
     resetDeletedFilesCount();
 
-    unsigned long long before = calculateTempSize();
-
     forceDeleteDumpFiles();
 
     aggressiveDumpCleanup();
@@ -940,9 +954,7 @@ unsigned long long cleanTemporaryFiles() {
     }
 
     sceIoRemove(CACHE_FILE_PATH);
-
-    unsigned long long after = calculateTempSize();
-    return before - after;
+    return 0;
 }
 
 FileList* createFileList() {
