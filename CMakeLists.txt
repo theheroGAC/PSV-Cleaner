@@ -15,7 +15,7 @@ include("${VITASDK}/share/vita.cmake" REQUIRED)
 # Info app
 set(VITA_APP_NAME "PSV Cleaner")
 set(VITA_TITLEID "CLEAN0000")
-set(VITA_VERSION "01.13")
+set(VITA_VERSION "01.14")
 
 # Flags C
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wl,-q -Wall -fno-lto")

@@ -136,7 +136,7 @@ extern int cleanAllAppsTempFiles;
 extern int cleanEasyVpK;
 extern int cleanDaemon;
 extern int cleanVitaGrafix;
-extern int cleanOneturtle;
+extern int cleanOnemenu;
 extern int cleanPCSX;
 extern int cleanMGBA;
 extern int cleanFlycast;
@@ -198,6 +198,7 @@ void freeAppList(AppList *list);
 void populateAppListWithSizes(AppList *list);
 unsigned long long calculateSingleAppTempFilesSize(const char *titleId);
 unsigned long long cleanSingleAppTempFiles(const char *titleId);
+int shouldCleanPath(const char *path);
 
 unsigned long long calculateOrphanedDLCDataSize();
 void findOrphanedDLCData();
@@ -228,6 +229,9 @@ void initScanProgress(int totalItems);
 void updateScanProgress(int currentItem);
 int getScanProgress();
 void resetScanProgress();
+
+typedef void (*ProgressCallback)(int percent);
+extern ProgressCallback g_progressCallback;
 
 #endif
 

@@ -13,6 +13,8 @@ int g_deletedFilesCount = 0;
 int g_emergencyStop = 0;
 int g_operationInProgress = 0;
 
+ProgressCallback g_progressCallback = NULL;
+
 unsigned long long g_cachedSpaceSize = 0;
 int g_spaceCalculationNeeded = 1;
 int g_lastCalculationFrame = 0;
@@ -42,7 +44,7 @@ int cleanAllAppsTempFiles = 0;
 int cleanEasyVpK = 1;
 int cleanDaemon = 1;
 int cleanVitaGrafix = 1;
-int cleanOneturtle = 1;
+int cleanOnemenu = 1;
 int cleanPCSX = 1;
 int cleanMGBA = 1;
 int cleanFlycast = 1;
@@ -76,7 +78,7 @@ int cleanEmptyLiveareaBubbles = 0;
 #define CACHE_FILE_PATH "ux0:data/PSV_Cleaner/scan_cache.bin"
 #define CACHE_VERSION 1
 #define CACHE_EXPIRY_HOURS 24
-#define MAX_CACHE_ENTRIES 100
+#define MAX_CACHE_ENTRIES 256
 
 typedef struct {
     char path[256];
@@ -277,8 +279,8 @@ const char *TEMP_PATHS[] = {
     "uma0:data/iTLS/cache/",
     
     "uma0:data/DE/cache/",
-    
-    "uma0:data/ONETurtle/cache/",
+    "ux0:data/ONEMenu/cache/",
+    "uma0:data/ONEMenu/cache/",
     
     "uma0:data/shellbat/cache/",
     
@@ -301,7 +303,8 @@ const char *TEMP_PATHS[] = {
     
     "ur0:temp/font/",
     "ux0:data/font/cache/",
-    "ux0:data/activity/cache/"
+    "ux0:data/activity/cache/",
+    "ux0:notification/"
 };
 
 const size_t TEMP_PATHS_COUNT = sizeof(TEMP_PATHS)/sizeof(TEMP_PATHS[0]);
@@ -354,7 +357,7 @@ const char* lang_ui_text[MAX_LANGUAGES][30] = {
         "Space to free:", "Space Freed:", "Files Deleted:",
         "D-Pad: Navigate | X: Select Profile | O: Exit",
         "Cleanup #", "No temporary files found!",
-        "System Ready", "Version 1.13"
+        "System Ready", "Version 1.14"
     }
 };
 
@@ -649,7 +652,7 @@ void cleanupVpkFiles() {
 
             char* filename = dir.d_name;
             int len = strlen(filename);
-            if (len > 4 && strcmp(filename + len - 4, ".vpk") == 0) {
+            if (len > 4 && (strcmp(filename + len - 4, ".vpk") == 0 || strcmp(filename + len - 4, ".pkg") == 0)) {
                 char fullPath[512];
                 snprintf(fullPath, sizeof(fullPath), "ux0:/%s", filename);
 
@@ -663,6 +666,7 @@ void cleanupVpkFiles() {
 }
 
 void deleteRecursive(const char *path) {
+    if (isEmergencyStopRequested()) return;
     SceUID dfd;
     dfd = sceIoDopen(path);
     if (dfd >= 0) {
@@ -673,6 +677,7 @@ void deleteRecursive(const char *path) {
         }
 
         while (sceIoDread(dfd, dir) > 0) {
+            if (isEmergencyStopRequested()) break;
             if (strcmp(dir->d_name, ".") == 0 || strcmp(dir->d_name, "..") == 0)
                 continue;
 
@@ -767,6 +772,56 @@ void updateSpaceCacheIfNeeded(int currentFrame) {
     }
 }
 
+int shouldCleanPath(const char *path) {
+    if (excludePictureFolder && strncmp(path, "ux0:picture/", 12) == 0) return 0;
+    if (excludeVideoFolder && strncmp(path, "ux0:video/", 10) == 0) return 0;
+    if (excludeVpkFiles && (strstr(path, ".vpk") != NULL || strstr(path, ".pkg") != NULL)) return 0;
+    if (excludeVitaDBCache && strncmp(path, "ux0:data/VitaDB/", 17) == 0) return 0;
+
+    if (strstr(path, "VitaShell/")) return cleanVitaShell;
+    if (strstr(path, "retroarch/")) return cleanRetroArch;
+    if (strstr(path, "Adrenaline/") || strstr(path, "pspemu/")) return cleanAdrenaline;
+    if (strstr(path, "browser/") || strstr(path, "webkit/")) return cleanBrowser;
+    
+    if (strstr(path, "EasyVPK/")) return cleanEasyVpK;
+    if (strstr(path, "DAEMON/")) return cleanDaemon;
+    if (strstr(path, "VitaGrafix/")) return cleanVitaGrafix;
+    if (strstr(path, "ONEMenu/")) return cleanOnemenu;
+    if (strstr(path, "pcsx_rearmed/")) return cleanPCSX;
+    if (strstr(path, "mgba/")) return cleanMGBA;
+    if (strstr(path, "flycast/")) return cleanFlycast;
+    if (strstr(path, "shellbat/")) return cleanShellbat;
+    if (strstr(path, "switchuser/")) return cleanSwitchUser;
+    if (strstr(path, "PSVitaDB/")) return cleanPSVitaDB;
+    if (strstr(path, "iTLS/")) return cleanITLS;
+    if (strstr(path, "DE/")) return cleanDownloadEnabler;
+    if (strstr(path, "VHBB/")) return cleanVHBB;
+    if (strstr(path, "moonlight/")) return cleanMoonlight;
+    if (strstr(path, "RetroFlow/")) return cleanRetroFlow;
+    if (strstr(path, "henkaku/") || strstr(path, "tai/")) return cleanHenkaku;
+    if (strstr(path, "PSVshell/")) return cleanPSVshell;
+    if (strstr(path, "vitacheat/") || strstr(path, "rinCheat/") || strstr(path, "savemgr/")) return cleanCheatTools;
+    
+    if (strstr(path, "theme/")) return cleanThemeCache;
+    if (strstr(path, "font/")) return cleanFontCache;
+    if (strstr(path, "notification/")) return cleanNotificationCache;
+    if (strstr(path, "activity/")) return cleanActivityLog;
+    if (strstr(path, "picture/") || strstr(path, "photo/") || strstr(path, "music/") || strstr(path, "video/")) return cleanPhotoMusicCache;
+    if (strstr(path, "net/")) return cleanNetworkCache;
+    if (strstr(path, "license/cache/") || strstr(path, "license/")) return cleanLicenseCache;
+
+    if (strstr(path, "temp/") || strstr(path, "cache/") || strstr(path, "log/") || 
+        strstr(path, "AutoPlugin/") || strstr(path, "AUTOPLUGIN2/") ||
+        strstr(path, "bgdl/t/") || strstr(path, "package/temp/") ||
+        strstr(path, "appmeta/temp/") || strstr(path, "patch_temp/") ||
+        strstr(path, "update_temp/") || strstr(path, "shaderlog/") ||
+        strstr(path, "np/")) {
+        return cleanSystem;
+    }
+
+    return 1;
+}
+
 unsigned long long calculateTempSize() {
     unsigned long long total = 0;
     ScanCache* cache = loadScanCache();
@@ -781,79 +836,24 @@ unsigned long long calculateTempSize() {
         }
     }
 
-    // Initialize scan progress tracking
     initScanProgress(TEMP_PATHS_COUNT);
 
     for(size_t i = 0; i < TEMP_PATHS_COUNT; i++){
         if (isEmergencyStopRequested()) break;
         
-        if (excludePictureFolder && strncmp(TEMP_PATHS[i], "ux0:picture/", 12) == 0) {
+        if (!shouldCleanPath(TEMP_PATHS[i])) {
             updateScanProgress(i + 1);
             continue;
         }
-        
-        if (excludeVideoFolder && strncmp(TEMP_PATHS[i], "ux0:video/", 10) == 0) {
-            updateScanProgress(i + 1);
-            continue;
-        }
-        
-        if (excludeVpkFiles && strstr(TEMP_PATHS[i], ".vpk") != NULL) {
-            updateScanProgress(i + 1);
-            continue;
-        }
-        
-        if (excludeVitaDBCache && strncmp(TEMP_PATHS[i], "ux0:data/VitaDB/", 17) == 0) {
-            updateScanProgress(i + 1);
-            continue;
-        }
-        
-        if (!cleanVitaShell && strstr(TEMP_PATHS[i], "VitaShell/")) {
-            updateScanProgress(i + 1);
-            continue;
-        }
-        if (!cleanRetroArch && strstr(TEMP_PATHS[i], "retroarch/")) {
-            updateScanProgress(i + 1);
-            continue;
-        }
-        if (!cleanAdrenaline && strstr(TEMP_PATHS[i], "Adrenaline/")) {
-            updateScanProgress(i + 1);
-            continue;
-        }
-        if (!cleanBrowser && (strstr(TEMP_PATHS[i], "browser/") || strstr(TEMP_PATHS[i], "webkit/"))) {
-            updateScanProgress(i + 1);
-            continue;
-        }
-        
-        if (!cleanSystem && (strstr(TEMP_PATHS[i], "temp/") || strstr(TEMP_PATHS[i], "cache/") || strstr(TEMP_PATHS[i], "log/") || strstr(TEMP_PATHS[i], "AutoPlugin/"))) continue;
-        if (!cleanVitaShell && strstr(TEMP_PATHS[i], "VitaShell/")) continue;
-        if (!cleanRetroArch && strstr(TEMP_PATHS[i], "retroarch/")) continue;
-        if (!cleanAdrenaline && (strstr(TEMP_PATHS[i], "Adrenaline/") || strstr(TEMP_PATHS[i], "pspemu/"))) continue;
-        if (!cleanBrowser && (strstr(TEMP_PATHS[i], "browser/") || strstr(TEMP_PATHS[i], "webkit/"))) continue;
-        if (excludeVideoFolder && strstr(TEMP_PATHS[i], "video/")) continue;
-        if (!cleanEasyVpK && strstr(TEMP_PATHS[i], "EasyVPK/")) continue;
-        if (!cleanDaemon && strstr(TEMP_PATHS[i], "DAEMON/")) continue;
-        if (!cleanVitaGrafix && strstr(TEMP_PATHS[i], "VitaGrafix/")) continue;
-        if (!cleanMGBA && strstr(TEMP_PATHS[i], "mgba/")) continue;
-        if (!cleanPCSX && strstr(TEMP_PATHS[i], "pcsx_rearmed/")) continue;
-        if (!cleanFlycast && strstr(TEMP_PATHS[i], "flycast/")) continue;
-        if (!cleanMoonlight && strstr(TEMP_PATHS[i], "moonlight/")) continue;
-        if (!cleanRetroFlow && strstr(TEMP_PATHS[i], "RetroFlow/")) continue;
-        if (!cleanHenkaku && (strstr(TEMP_PATHS[i], "henkaku/") || strstr(TEMP_PATHS[i], "tai/"))) continue;
-        if (!cleanPSVshell && strstr(TEMP_PATHS[i], "PSVshell/")) continue;
-        if (!cleanVHBB && strstr(TEMP_PATHS[i], "VHBB/")) continue;
-        if (!cleanITLS && strstr(TEMP_PATHS[i], "iTLS/")) continue;
-        if (!cleanDownloadEnabler && strstr(TEMP_PATHS[i], "DE/")) continue;
-        if (!cleanThemeCache && (strstr(TEMP_PATHS[i], "theme/") || strstr(TEMP_PATHS[i], "font/"))) continue;
-        if (!cleanCheatTools && (strstr(TEMP_PATHS[i], "vitacheat/") || strstr(TEMP_PATHS[i], "rinCheat/") || strstr(TEMP_PATHS[i], "savemgr/"))) continue;
 
         unsigned long long pathSize = 0;
 
-        if (cache && cache->entries[i].isValid && !hasDirectoryChanged(TEMP_PATHS[i], &cache->entries[i].lastModified)) {
+        if (cache && i < MAX_CACHE_ENTRIES && cache->entries[i].isValid && !hasDirectoryChanged(TEMP_PATHS[i], &cache->entries[i].lastModified)) {
             pathSize = cache->entries[i].totalSize;
         } else {
             pathSize = calculateTempSizeRecursive(TEMP_PATHS[i]);
 
-            if (newCache) {
+            if (newCache && i < MAX_CACHE_ENTRIES) {
                 newCache->entries[i] = createCacheEntry(TEMP_PATHS[i]);
             }
         }
@@ -871,7 +871,6 @@ unsigned long long calculateTempSize() {
         free(cache);
     }
 
-    
     total += calculateOrphanedDataSize();
     total += calculateAllAppsTempFilesSize();
     total += calculateOrphanedDLCDataSize();
@@ -885,86 +884,80 @@ unsigned long long calculateTempSize() {
 unsigned long long cleanTemporaryFiles() {
     resetDeletedFilesCount();
 
+    if (g_progressCallback) g_progressCallback(5);
     forceDeleteDumpFiles();
-
+    if (g_progressCallback) g_progressCallback(7);
     aggressiveDumpCleanup();
+    if (g_progressCallback) g_progressCallback(10);
 
     if (!excludeVpkFiles) {
         cleanupVpkFiles();
     }
+    if (g_progressCallback) g_progressCallback(12);
 
     for(size_t i=0;i<TEMP_PATHS_COUNT;i++){
+        if (isEmergencyStopRequested()) break;
         
-        if (excludePictureFolder && strncmp(TEMP_PATHS[i], "ux0:picture/", 12) == 0) {
-            continue;
-        }
-        
-        if (excludeVideoFolder && strncmp(TEMP_PATHS[i], "ux0:video/", 10) == 0) {
-            continue;
-        }
-        
-        if (excludeVpkFiles && strstr(TEMP_PATHS[i], ".vpk") != NULL) {
-            continue;
-        }
-        
-        if (excludeVitaDBCache && strncmp(TEMP_PATHS[i], "ux0:data/VitaDB/", 17) == 0) {
-            continue;
-        }
-        
-        if (!cleanVitaShell && strstr(TEMP_PATHS[i], "VitaShell/")) {
-            continue;
-        }
-        if (!cleanRetroArch && strstr(TEMP_PATHS[i], "retroarch/")) {
-            continue;
-        }
-        if (!cleanAdrenaline && strstr(TEMP_PATHS[i], "Adrenaline/")) {
-            continue;
-        }
-        if (!cleanBrowser && (strstr(TEMP_PATHS[i], "browser/") || strstr(TEMP_PATHS[i], "webkit/"))) {
-            continue;
-        }
-        
-        if (!cleanSystem && (strstr(TEMP_PATHS[i], "ux0:temp/") || strstr(TEMP_PATHS[i], "ux0:cache/") || strstr(TEMP_PATHS[i], "ux0:log/") ||
-            strstr(TEMP_PATHS[i], "AutoPlugin/") || strstr(TEMP_PATHS[i], "AUTOPLUGIN2/"))) {
+        if (!shouldCleanPath(TEMP_PATHS[i])) {
+            if (g_progressCallback) {
+                int pct = 15 + (i * 70) / TEMP_PATHS_COUNT;
+                g_progressCallback(pct);
+            }
             continue;
         }
         deleteRecursive(TEMP_PATHS[i]);
+        
+        if (g_progressCallback) {
+            int pct = 15 + (i * 70) / TEMP_PATHS_COUNT;
+            g_progressCallback(pct);
+        }
     }
 
+    if (g_progressCallback) g_progressCallback(82);
     forceDeleteDumpFiles();
     aggressiveDumpCleanup();
+    if (g_progressCallback) g_progressCallback(85);
 
     if (!excludeVpkFiles) {
         cleanupVpkFiles();
     }
+    if (g_progressCallback) g_progressCallback(87);
 
     if (cleanOrphanedData) {
         findOrphanedDataDirectories();
     }
+    if (g_progressCallback) g_progressCallback(90);
 
     if (cleanAllAppsTempFiles) {
         cleanAllAppsTempFilesData();
     }
+    if (g_progressCallback) g_progressCallback(93);
 
     // NEW orphan cleanups
     if (cleanOrphanedDLC) {
         findOrphanedDLCData();
     }
+    if (g_progressCallback) g_progressCallback(95);
     if (cleanOrphanedAddcont) {
         findOrphanedAddcont();
     }
+    if (g_progressCallback) g_progressCallback(96);
     if (cleanOrphanedLicenseFiles) {
         findOrphanedLicenseFiles();
     }
+    if (g_progressCallback) g_progressCallback(97);
     if (cleanEmptyLiveareaBubbles) {
         removeEmptyLiveareaBubbles();
     }
+    if (g_progressCallback) g_progressCallback(98);
     if (cleanOrphanedData) {
         findOrphanedLicenseDirectories();
         findOrphanedPatchDirectories();
     }
+    if (g_progressCallback) g_progressCallback(99);
 
     sceIoRemove(CACHE_FILE_PATH);
+    if (g_progressCallback) g_progressCallback(100);
     return 0;
 }
 
@@ -1290,6 +1283,7 @@ void findOrphanedLicenseDirectories() {
     memset(&dir, 0, sizeof(SceIoDirent));
 
     while (sceIoDread(dfd, &dir) > 0) {
+        if (isEmergencyStopRequested()) break;
         if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
 
         char dirName[MAX_FILENAME_LENGTH];
@@ -1329,6 +1323,7 @@ void findOrphanedPatchDirectories() {
     memset(&dir, 0, sizeof(SceIoDirent));
 
     while (sceIoDread(dfd, &dir) > 0) {
+        if (isEmergencyStopRequested()) break;
         if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
 
         char dirName[MAX_FILENAME_LENGTH];
@@ -1933,6 +1928,7 @@ void findOrphanedDLCData() {
     memset(&dir, 0, sizeof(SceIoDirent));
 
     while (sceIoDread(dfd, &dir) > 0) {
+        if (isEmergencyStopRequested()) break;
         if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
 
         char dirName[MAX_FILENAME_LENGTH];
@@ -1988,6 +1984,7 @@ void findOrphanedAddcont() {
     memset(&dir, 0, sizeof(SceIoDirent));
 
     while (sceIoDread(dfd, &dir) > 0) {
+        if (isEmergencyStopRequested()) break;
         if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
 
         char dirName[MAX_FILENAME_LENGTH];
@@ -2040,6 +2037,7 @@ void findOrphanedLicenseFiles() {
     memset(&dir, 0, sizeof(SceIoDirent));
 
     while (sceIoDread(dfd, &dir) > 0) {
+        if (isEmergencyStopRequested()) break;
         if (SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
         char* filename = dir.d_name;
         int len = strlen(filename);
@@ -2163,6 +2161,7 @@ void removeEmptyLiveareaBubbles() {
     int bubbleDirCount = sizeof(bubbleDirs) / sizeof(bubbleDirs[0]);
 
     for (int d = 0; d < bubbleDirCount; d++) {
+        if (isEmergencyStopRequested()) break;
         SceUID dfd = sceIoDopen(bubbleDirs[d]);
         if (dfd < 0) continue;
 
@@ -2170,6 +2169,7 @@ void removeEmptyLiveareaBubbles() {
         memset(&dir, 0, sizeof(SceIoDirent));
 
         while (sceIoDread(dfd, &dir) > 0) {
+            if (isEmergencyStopRequested()) break;
             if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
 
             char dirName[MAX_FILENAME_LENGTH];
