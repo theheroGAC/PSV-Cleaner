@@ -428,7 +428,7 @@ const char* getOptionDescription(int index) {
         case 0:  return "Deletes temporary files created by the operating system.";
         case 1:  return "Cleans VitaShell icons, logs, and temporary backups.";
         case 2:  return "Removes images and data cached by PKGi/PKGj.";
-        case 3:  return "Empties RetroArch shader cache and log files.";
+        case 3:  return "Empties RetroArch & Emu4Vita/Plus shader cache and log files.";
         case 4:  return "Deletes temporary plugin update and install files.";
         case 5:  return "Cleans PSP logs and crash dumps from Adrenaline.";
         case 6:  return "Removes large core dump files (psp2dmp) from the system.";
@@ -477,7 +477,7 @@ void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
     strcpy(menu->options[0], "System Temp Files");
     strcpy(menu->options[1], "VitaShell Cache");
     strcpy(menu->options[2], "PKGi Cache");
-    strcpy(menu->options[3], "RetroArch Cache");
+    strcpy(menu->options[3], "RetroArch/Emu4Vita");
     strcpy(menu->options[4], "Autoplugin Cache");
     strcpy(menu->options[5], "Adrenaline Cache");
     strcpy(menu->options[6], "Crash Dumps");

@@ -130,6 +130,12 @@ const char *TEMP_PATHS[] = {
     "ux0:data/retroarch/thumbnails/cache/",
     "ux0:data/retroarch/shaders/cache/",
     "ux0:data/retroarch/database/rdb/temp/",
+    "ux0:data/EMU4VITA/cache/",
+    "ux0:data/EMU4VITA/logs/",
+    "ux0:data/EMU4VITA/temp/",
+    "ux0:data/EMU4VITAPLUS/cache/",
+    "ux0:data/EMU4VITAPLUS/logs/",
+    "ux0:data/EMU4VITAPLUS/temp/",
     
     "ux0:pspemu/temp/",
     "ux0:pspemu/cache/",
@@ -209,6 +215,12 @@ const char *TEMP_PATHS[] = {
     "uma0:data/retroarch/cache/",
     "uma0:data/retroarch/logs/",
     "uma0:data/retroarch/temp/",
+    "uma0:data/EMU4VITA/cache/",
+    "uma0:data/EMU4VITA/logs/",
+    "uma0:data/EMU4VITA/temp/",
+    "uma0:data/EMU4VITAPLUS/cache/",
+    "uma0:data/EMU4VITAPLUS/logs/",
+    "uma0:data/EMU4VITAPLUS/temp/",
     "uma0:data/Adrenaline/cache/",
     "uma0:data/Adrenaline/logs/",
     "uma0:data/Adrenaline/temp/",
@@ -779,7 +791,7 @@ int shouldCleanPath(const char *path) {
     if (excludeVitaDBCache && strncmp(path, "ux0:data/VitaDB/", 17) == 0) return 0;
 
     if (strstr(path, "VitaShell/")) return cleanVitaShell;
-    if (strstr(path, "retroarch/")) return cleanRetroArch;
+    if (strstr(path, "retroarch/") || strstr(path, "emu4vita/") || strstr(path, "emu4vitaplus/") || strstr(path, "EMU4VITA/") || strstr(path, "EMU4VITAPLUS/")) return cleanRetroArch;
     if (strstr(path, "Adrenaline/") || strstr(path, "pspemu/")) return cleanAdrenaline;
     if (strstr(path, "browser/") || strstr(path, "webkit/")) return cleanBrowser;
     
@@ -1379,7 +1391,7 @@ void scanFilesForPreview(FileList *list) {
         if (!cleanVitaShell && strstr(TEMP_PATHS[i], "VitaShell/")) {
             continue;
         }
-        if (!cleanRetroArch && strstr(TEMP_PATHS[i], "retroarch/")) {
+        if (!cleanRetroArch && (strstr(TEMP_PATHS[i], "retroarch/") || strstr(TEMP_PATHS[i], "emu4vita/") || strstr(TEMP_PATHS[i], "emu4vitaplus/") || strstr(TEMP_PATHS[i], "EMU4VITA/") || strstr(TEMP_PATHS[i], "EMU4VITAPLUS/"))) {
             continue;
         }
         if (!cleanAdrenaline && strstr(TEMP_PATHS[i], "Adrenaline/")) {
