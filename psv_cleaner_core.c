@@ -15,23 +15,29 @@ int g_operationInProgress = 0;
 
 ProgressCallback g_progressCallback = NULL;
 
+static int g_lastProgressPercent = 0;
+
+static void reportProgress(int pct) {
+    g_lastProgressPercent = pct;
+    if (g_progressCallback) {
+        g_progressCallback(pct);
+    }
+}
+
 unsigned long long g_cachedSpaceSize = 0;
 int g_spaceCalculationNeeded = 1;
 int g_lastCalculationFrame = 0;
 #define CALCULATION_INTERVAL_FRAMES 60
 
-// Scanning progress tracking
 int g_scanProgress = 0;
 int g_totalScanItems = 0;
 int g_currentScanItem = 0; 
 
-// Exclusion settings
 int excludePictureFolder = 0;
 int excludeVpkFiles = 0;
 int excludeVitaDBCache = 0;
 int excludeVideoFolder = 0;
 
-// Selective app cleaning settings
 int cleanVitaShell = 1;
 int cleanRetroArch = 1;
 int cleanAdrenaline = 1;
@@ -39,8 +45,10 @@ int cleanBrowser = 1;
 int cleanSystem = 1;
 int cleanOrphanedData = 0;
 int cleanAllAppsTempFiles = 0;
+int cleanPkgi = 1;
+int cleanAutoplugin = 1;
+int cleanCrashDumps = 1;
 
-// NEW: Additional homebrew/emulator cleaning settings
 int cleanEasyVpK = 1;
 int cleanDaemon = 1;
 int cleanVitaGrafix = 1;
@@ -60,7 +68,6 @@ int cleanHenkaku = 1;
 int cleanPSVshell = 1;
 int cleanCheatTools = 1;
 
-// NEW: Additional system cleaning categories
 int cleanThemeCache = 1;
 int cleanNotificationCache = 1;
 int cleanActivityLog = 1;
@@ -369,7 +376,7 @@ const char* lang_ui_text[MAX_LANGUAGES][30] = {
         "Space to free:", "Space Freed:", "Files Deleted:",
         "D-Pad: Navigate | X: Select Profile | O: Exit",
         "Cleanup #", "No temporary files found!",
-        "System Ready", "Version 1.14"
+        "System Ready", "Version 1.15"
     }
 };
 
@@ -444,23 +451,17 @@ int isOperationInProgress() {
 }
 
 void cleanupAfterEmergencyStop() {
-    // Reset emergency stop flags
     g_emergencyStop = 0;
     g_operationInProgress = 0;
     
-    // Invalidate space cache to ensure fresh calculation after interruption
     invalidateSpaceCache();
     
-    // Clear scan cache to prevent stale data
     clearScanCache();
     
-    // Reset deleted files counter for accurate tracking
     resetDeletedFilesCount();
     
-    // Reset scan progress
     resetScanProgress();
     
-    // Ensure all I/O operations are completed
     sceKernelDelayThread(500 * 1000);
     
     
@@ -706,6 +707,9 @@ void deleteRecursive(const char *path) {
             } else {
                 if (sceIoRemove(newPath) >= 0) {
                     g_deletedFilesCount++;
+                    if (g_progressCallback && (g_deletedFilesCount % 20) == 0) {
+                        g_progressCallback(g_lastProgressPercent);
+                    }
                 }
             }
             free(newPath);
@@ -791,6 +795,7 @@ int shouldCleanPath(const char *path) {
     if (excludeVitaDBCache && strncmp(path, "ux0:data/VitaDB/", 17) == 0) return 0;
 
     if (strstr(path, "VitaShell/")) return cleanVitaShell;
+    if (strstr(path, "pkgi/") || strstr(path, "pkgj/")) return cleanPkgi;
     if (strstr(path, "retroarch/") || strstr(path, "emu4vita/") || strstr(path, "emu4vitaplus/") || strstr(path, "EMU4VITA/") || strstr(path, "EMU4VITAPLUS/")) return cleanRetroArch;
     if (strstr(path, "Adrenaline/") || strstr(path, "pspemu/")) return cleanAdrenaline;
     if (strstr(path, "browser/") || strstr(path, "webkit/")) return cleanBrowser;
@@ -822,8 +827,14 @@ int shouldCleanPath(const char *path) {
     if (strstr(path, "net/")) return cleanNetworkCache;
     if (strstr(path, "license/cache/") || strstr(path, "license/")) return cleanLicenseCache;
 
+    if (strstr(path, "psp2core") || strstr(path, "psp2dmp") ||
+        strstr(path, "crash_dumps/") || strstr(path, "dumps/")) {
+        return cleanCrashDumps;
+    }
+
+    if (strstr(path, "AutoPlugin/") || strstr(path, "AUTOPLUGIN2/")) return cleanAutoplugin;
+
     if (strstr(path, "temp/") || strstr(path, "cache/") || strstr(path, "log/") || 
-        strstr(path, "AutoPlugin/") || strstr(path, "AUTOPLUGIN2/") ||
         strstr(path, "bgdl/t/") || strstr(path, "package/temp/") ||
         strstr(path, "appmeta/temp/") || strstr(path, "patch_temp/") ||
         strstr(path, "update_temp/") || strstr(path, "shaderlog/") ||
@@ -888,6 +899,8 @@ unsigned long long calculateTempSize() {
     total += calculateOrphanedDLCDataSize();
     total += calculateOrphanedAddcontSize();
     total += calculateOrphanedLicenseFilesSize();
+    total += calculateOrphanedLicenseDirsSize();
+    total += calculateOrphanedPatchDirsSize();
     total += calculateEmptyLiveareaBubblesSize();
 
     return total;
@@ -896,80 +909,69 @@ unsigned long long calculateTempSize() {
 unsigned long long cleanTemporaryFiles() {
     resetDeletedFilesCount();
 
-    if (g_progressCallback) g_progressCallback(5);
-    forceDeleteDumpFiles();
-    if (g_progressCallback) g_progressCallback(7);
-    aggressiveDumpCleanup();
-    if (g_progressCallback) g_progressCallback(10);
+    reportProgress(5);
+    if (cleanCrashDumps) {
+        forceDeleteDumpFiles();
+    }
+    reportProgress(7);
+    if (cleanCrashDumps) {
+        aggressiveDumpCleanup();
+    }
+    reportProgress(10);
 
     if (!excludeVpkFiles) {
         cleanupVpkFiles();
     }
-    if (g_progressCallback) g_progressCallback(12);
+    reportProgress(12);
 
     for(size_t i=0;i<TEMP_PATHS_COUNT;i++){
         if (isEmergencyStopRequested()) break;
         
         if (!shouldCleanPath(TEMP_PATHS[i])) {
-            if (g_progressCallback) {
-                int pct = 15 + (i * 70) / TEMP_PATHS_COUNT;
-                g_progressCallback(pct);
-            }
+            reportProgress(15 + (i * 70) / TEMP_PATHS_COUNT);
             continue;
         }
         deleteRecursive(TEMP_PATHS[i]);
         
-        if (g_progressCallback) {
-            int pct = 15 + (i * 70) / TEMP_PATHS_COUNT;
-            g_progressCallback(pct);
-        }
+        reportProgress(15 + (i * 70) / TEMP_PATHS_COUNT);
     }
 
-    if (g_progressCallback) g_progressCallback(82);
-    forceDeleteDumpFiles();
-    aggressiveDumpCleanup();
-    if (g_progressCallback) g_progressCallback(85);
-
-    if (!excludeVpkFiles) {
-        cleanupVpkFiles();
-    }
-    if (g_progressCallback) g_progressCallback(87);
+    reportProgress(87);
 
     if (cleanOrphanedData) {
         findOrphanedDataDirectories();
     }
-    if (g_progressCallback) g_progressCallback(90);
+    reportProgress(90);
 
     if (cleanAllAppsTempFiles) {
         cleanAllAppsTempFilesData();
     }
-    if (g_progressCallback) g_progressCallback(93);
+    reportProgress(93);
 
-    // NEW orphan cleanups
     if (cleanOrphanedDLC) {
         findOrphanedDLCData();
     }
-    if (g_progressCallback) g_progressCallback(95);
+    reportProgress(95);
     if (cleanOrphanedAddcont) {
         findOrphanedAddcont();
     }
-    if (g_progressCallback) g_progressCallback(96);
+    reportProgress(96);
     if (cleanOrphanedLicenseFiles) {
         findOrphanedLicenseFiles();
     }
-    if (g_progressCallback) g_progressCallback(97);
+    reportProgress(97);
     if (cleanEmptyLiveareaBubbles) {
         removeEmptyLiveareaBubbles();
     }
-    if (g_progressCallback) g_progressCallback(98);
+    reportProgress(98);
     if (cleanOrphanedData) {
         findOrphanedLicenseDirectories();
         findOrphanedPatchDirectories();
     }
-    if (g_progressCallback) g_progressCallback(99);
+    reportProgress(99);
 
     sceIoRemove(CACHE_FILE_PATH);
-    if (g_progressCallback) g_progressCallback(100);
+    reportProgress(100);
     return 0;
 }
 
@@ -1126,7 +1128,6 @@ int deleteSingleFileFromList(FileList *list, int index) {
     return 0;
 }
 
-// Orphaned data cleanup functions
 void getInstalledAppsList(char ***apps, int *count) {
     *count = 0;
     *apps = NULL;
@@ -1161,6 +1162,20 @@ int isAppInstalled(const char *title_id) {
     return sceIoGetstat(path, &stat) >= 0;
 }
 
+int isOlderThanDays(const SceDateTime *mtime, int days) {
+    SceDateTime now;
+    getCurrentTime(&now);
+
+    SceRtcTick nowTicks, modTicks;
+    sceRtcGetTick(&now, &nowTicks);
+    sceRtcGetTick(mtime, &modTicks);
+
+    SceRtcTick thresholdTicks;
+    sceRtcTickAddDays(&thresholdTicks, &modTicks, days);
+
+    return sceRtcCompareTick(&nowTicks, &thresholdTicks) >= 0;
+}
+
 void findOrphanedDataDirectories() {
     const char *dataRoots[] = {"ux0:data/"};
     const int dataRootsCount = 1;
@@ -1178,7 +1193,6 @@ void findOrphanedDataDirectories() {
             char dirName[MAX_FILENAME_LENGTH];
             safe_strncpy(dirName, dir.d_name, sizeof(dirName));
 
-            // Skip known system directories that are not app data
             if (strcmp(dirName, "Adrenaline") == 0 ||
                 strcmp(dirName, "AutoPlugin") == 0 ||
                 strcmp(dirName, "AUTOPLUGIN2") == 0 ||
@@ -1278,11 +1292,64 @@ unsigned long long calculateOrphanedDataSize() {
             if (strlen(dirName) == 9 && !isAppInstalled(dirName)) {
                 char fullPath[MAX_PATH_LENGTH];
                 safe_snprintf(fullPath, sizeof(fullPath), "%s%s", dataRoots[root], dirName);
+
+                SceIoStat stat;
+                if (sceIoGetstat(fullPath, &stat) < 0) continue;
+                if (!isOlderThanDays(&stat.st_mtime, 30)) continue;
+
                 total += calculateTempSizeRecursive(fullPath);
             }
         }
         sceIoDclose(dfd);
     }
+
+    return total;
+}
+
+unsigned long long calculateOrphanedLicenseDirsSize() {
+    unsigned long long total = 0;
+    if (!cleanOrphanedData) return 0;
+
+    SceUID dfd = sceIoDopen("ux0:license/");
+    if (dfd < 0) return 0;
+
+    SceIoDirent dir;
+    memset(&dir, 0, sizeof(SceIoDirent));
+
+    while (sceIoDread(dfd, &dir) > 0) {
+        if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+        if (strlen(dir.d_name) != 16 || isAppInstalled(dir.d_name + 7)) continue;
+        if (!isOlderThanDays(&dir.d_stat.st_mtime, 30)) continue;
+
+        char fullPath[MAX_PATH_LENGTH];
+        safe_snprintf(fullPath, sizeof(fullPath), "ux0:license/%s", dir.d_name);
+        total += calculateTempSizeRecursive(fullPath);
+    }
+    sceIoDclose(dfd);
+
+    return total;
+}
+
+unsigned long long calculateOrphanedPatchDirsSize() {
+    unsigned long long total = 0;
+    if (!cleanOrphanedData) return 0;
+
+    SceUID dfd = sceIoDopen("ux0:patch/");
+    if (dfd < 0) return 0;
+
+    SceIoDirent dir;
+    memset(&dir, 0, sizeof(SceIoDirent));
+
+    while (sceIoDread(dfd, &dir) > 0) {
+        if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+        if (strlen(dir.d_name) != 9 || isAppInstalled(dir.d_name)) continue;
+        if (!isOlderThanDays(&dir.d_stat.st_mtime, 30)) continue;
+
+        char fullPath[MAX_PATH_LENGTH];
+        safe_snprintf(fullPath, sizeof(fullPath), "ux0:patch/%s", dir.d_name);
+        total += calculateTempSizeRecursive(fullPath);
+    }
+    sceIoDclose(dfd);
 
     return total;
 }
@@ -1367,46 +1434,40 @@ void findOrphanedPatchDirectories() {
     sceIoDclose(dfd);
 }
 
+static int isSystemDataDirName(const char *dirName) {
+    return strcmp(dirName, "Adrenaline") == 0 ||
+        strcmp(dirName, "AutoPlugin") == 0 ||
+        strcmp(dirName, "AUTOPLUGIN2") == 0 ||
+        strcmp(dirName, "browser") == 0 ||
+        strcmp(dirName, "RetroFlow") == 0 ||
+        strcmp(dirName, "VitaDB") == 0 ||
+        strcmp(dirName, "henkaku") == 0 ||
+        strcmp(dirName, "moonlight") == 0 ||
+        strcmp(dirName, "PSP2SHELL") == 0 ||
+        strcmp(dirName, "PSVshell") == 0 ||
+        strcmp(dirName, "RetroArch") == 0 ||
+        strcmp(dirName, "VitaShell") == 0 ||
+        strcmp(dirName, "savemgr") == 0 ||
+        strcmp(dirName, "vitacheat") == 0 ||
+        strcmp(dirName, "rinCheat") == 0 ||
+        strcmp(dirName, "webkit") == 0 ||
+        strcmp(dirName, "net") == 0 ||
+        strcmp(dirName, "pkg") == 0 ||
+        strcmp(dirName, "PSV_Cleaner") == 0 ||
+        strcmp(dirName, "logs") == 0 ||
+        strcmp(dirName, "cache") == 0;
+}
+
 void scanFilesForPreview(FileList *list) {
     if (!list) return;
 
     for(size_t i=0; i<TEMP_PATHS_COUNT; i++){
-        // Apply exclusion settings before scanning
-        if (excludePictureFolder && strncmp(TEMP_PATHS[i], "ux0:picture/", 12) == 0) {
+        if (isEmergencyStopRequested()) break;
+
+        if (!shouldCleanPath(TEMP_PATHS[i])) {
             continue;
         }
-        
-        if (excludeVideoFolder && strncmp(TEMP_PATHS[i], "ux0:video/", 10) == 0) {
-            continue;
-        }
-        
-        if (excludeVpkFiles && strstr(TEMP_PATHS[i], ".vpk") != NULL) {
-            continue;
-        }
-        
-        if (excludeVitaDBCache && strncmp(TEMP_PATHS[i], "ux0:data/VitaDB/", 17) == 0) {
-            continue;
-        }
-        
-        if (!cleanVitaShell && strstr(TEMP_PATHS[i], "VitaShell/")) {
-            continue;
-        }
-        if (!cleanRetroArch && (strstr(TEMP_PATHS[i], "retroarch/") || strstr(TEMP_PATHS[i], "emu4vita/") || strstr(TEMP_PATHS[i], "emu4vitaplus/") || strstr(TEMP_PATHS[i], "EMU4VITA/") || strstr(TEMP_PATHS[i], "EMU4VITAPLUS/"))) {
-            continue;
-        }
-        if (!cleanAdrenaline && strstr(TEMP_PATHS[i], "Adrenaline/")) {
-            continue;
-        }
-        if (!cleanBrowser && (strstr(TEMP_PATHS[i], "browser/") || strstr(TEMP_PATHS[i], "webkit/"))) {
-            continue;
-        }
-        
-        if (!cleanSystem && (strstr(TEMP_PATHS[i], "ux0:temp/") || strstr(TEMP_PATHS[i], "ux0:cache/") || strstr(TEMP_PATHS[i], "ux0:log/") ||
-            strstr(TEMP_PATHS[i], "AutoPlugin/") || strstr(TEMP_PATHS[i], "AUTOPLUGIN2/"))) {
-            continue;
-        }
-        if (excludeVideoFolder && strstr(TEMP_PATHS[i], "video/")) continue;
-        
+
         scanPathForPreview(list, TEMP_PATHS[i]);
     }
 
@@ -1417,7 +1478,7 @@ void scanFilesForPreview(FileList *list) {
         "ux0:log/"
     };
 
-    for (int path = 0; path < 4; path++) {
+    for (int path = 0; path < 4 && cleanCrashDumps; path++) {
         SceUID dfd = sceIoDopen(dumpSearchPaths[path]);
         if (dfd >= 0) {
             SceIoDirent dir;
@@ -1482,6 +1543,127 @@ void scanFilesForPreview(FileList *list) {
                 free(apps[i]);
             }
             free(apps);
+        }
+    }
+
+    if (cleanOrphanedData) {
+        SceUID dfd = sceIoDopen("ux0:data/");
+        if (dfd >= 0) {
+            SceIoDirent dir;
+            memset(&dir, 0, sizeof(SceIoDirent));
+
+            while (sceIoDread(dfd, &dir) > 0) {
+                if (isEmergencyStopRequested()) break;
+                if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+                if (isSystemDataDirName(dir.d_name)) continue;
+                if (strlen(dir.d_name) != 9 || isAppInstalled(dir.d_name)) continue;
+
+                char fullPath[MAX_PATH_LENGTH];
+                safe_snprintf(fullPath, sizeof(fullPath), "ux0:data/%s", dir.d_name);
+
+                SceIoStat stat;
+                if (sceIoGetstat(fullPath, &stat) < 0) continue;
+                if (!isOlderThanDays(&stat.st_mtime, 30)) continue;
+
+                scanPathForPreview(list, fullPath);
+            }
+            sceIoDclose(dfd);
+        }
+    }
+
+    if (cleanOrphanedDLC || cleanOrphanedAddcont) {
+        SceUID dfd = sceIoDopen("ux0:addcont/");
+        if (dfd >= 0) {
+            SceIoDirent dir;
+            memset(&dir, 0, sizeof(SceIoDirent));
+
+            while (sceIoDread(dfd, &dir) > 0) {
+                if (isEmergencyStopRequested()) break;
+                if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+
+                if (strlen(dir.d_name) == 9) {
+                    if (!cleanOrphanedDLC || isAppInstalled(dir.d_name)) continue;
+                } else {
+                    if (!cleanOrphanedAddcont) continue;
+                }
+
+                char fullPath[MAX_PATH_LENGTH];
+                safe_snprintf(fullPath, sizeof(fullPath), "ux0:addcont/%s", dir.d_name);
+                scanPathForPreview(list, fullPath);
+            }
+            sceIoDclose(dfd);
+        }
+    }
+
+    if (cleanOrphanedLicenseFiles) {
+        SceUID dfd = sceIoDopen("ux0:license/");
+        if (dfd >= 0) {
+            SceIoDirent dir;
+            memset(&dir, 0, sizeof(SceIoDirent));
+
+            while (sceIoDread(dfd, &dir) > 0) {
+                if (isEmergencyStopRequested()) break;
+                if (SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+
+                char *filename = dir.d_name;
+                int len = strlen(filename);
+                if (len <= 4 || strcmp(filename + len - 4, ".rif") != 0) continue;
+
+                int isOrphaned = 0;
+                if (len == 20) {
+                    char titleId[10] = {0};
+                    memcpy(titleId, filename, 9);
+                    titleId[9] = '\0';
+                    if (!isAppInstalled(titleId)) isOrphaned = 1;
+                } else if (len == 16 && isOlderThanDays(&dir.d_stat.st_mtime, 60)) {
+                    isOrphaned = 1;
+                }
+
+                if (isOrphaned) {
+                    char fullPath[MAX_PATH_LENGTH];
+                    safe_snprintf(fullPath, sizeof(fullPath), "ux0:license/%s", filename);
+                    addFileToList(list, fullPath, dir.d_stat.st_size);
+                }
+            }
+            sceIoDclose(dfd);
+        }
+    }
+
+    if (cleanOrphanedData) {
+        SceUID dfd = sceIoDopen("ux0:license/");
+        if (dfd >= 0) {
+            SceIoDirent dir;
+            memset(&dir, 0, sizeof(SceIoDirent));
+
+            while (sceIoDread(dfd, &dir) > 0) {
+                if (isEmergencyStopRequested()) break;
+                if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+                if (strlen(dir.d_name) != 16 || isAppInstalled(dir.d_name + 7)) continue;
+                if (!isOlderThanDays(&dir.d_stat.st_mtime, 30)) continue;
+
+                char fullPath[MAX_PATH_LENGTH];
+                safe_snprintf(fullPath, sizeof(fullPath), "ux0:license/%s", dir.d_name);
+                scanPathForPreview(list, fullPath);
+            }
+            sceIoDclose(dfd);
+        }
+
+        dfd = sceIoDopen("ux0:patch/");
+        if (dfd >= 0) {
+            SceIoDirent dir;
+            memset(&dir, 0, sizeof(SceIoDirent));
+
+            while (sceIoDread(dfd, &dir) > 0) {
+                if (isEmergencyStopRequested()) break;
+                if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+                if (strlen(dir.d_name) != 9 || isAppInstalled(dir.d_name)) continue;
+                if (!isOlderThanDays(&dir.d_stat.st_mtime, 30)) continue;
+
+                char fullPath[MAX_PATH_LENGTH];
+                safe_snprintf(fullPath, sizeof(fullPath), "ux0:patch/%s", dir.d_name);
+                scanPathForPreview(list, fullPath);
+            }
+            sceIoDclose(dfd);
         }
     }
 }
@@ -1898,10 +2080,6 @@ unsigned long long cleanSingleAppTempFiles(const char *titleId) {
     return totalCleaned;
 }
 
-// ============================================================
-// NEW: Orphaned DLC data cleaning (ux0:addcont/ folder)
-// DLC for apps that are no longer installed
-// ============================================================
 
 unsigned long long calculateOrphanedDLCDataSize() {
     unsigned long long total = 0;
@@ -1955,9 +2133,6 @@ void findOrphanedDLCData() {
     sceIoDclose(dfd);
 }
 
-// ============================================================
-// NEW: Orphaned addcont (non-TitleID folders in addcont/)
-// ============================================================
 
 unsigned long long calculateOrphanedAddcontSize() {
     unsigned long long total = 0;
@@ -2011,9 +2186,6 @@ void findOrphanedAddcont() {
     sceIoDclose(dfd);
 }
 
-// ============================================================
-// NEW: Orphaned license files (*.rif) - licenses for apps not installed
-// ============================================================
 
 unsigned long long calculateOrphanedLicenseFilesSize() {
     unsigned long long total = 0;
@@ -2034,6 +2206,38 @@ unsigned long long calculateOrphanedLicenseFilesSize() {
         if (len > 4 && strcmp(filename + len - 4, ".rif") == 0) {
             char fullPath[MAX_PATH_LENGTH];
             safe_snprintf(fullPath, sizeof(fullPath), "ux0:license/%s", filename);
+
+            int isOrphaned = 0;
+
+            if (len == 20) {
+                char titleId[10] = {0};
+                memcpy(titleId, filename, 9);
+                titleId[9] = '\0';
+                if (!isAppInstalled(titleId)) {
+                    isOrphaned = 1;
+                }
+            } else if (len == 16) {
+                SceIoStat stat;
+                if (sceIoGetstat(fullPath, &stat) >= 0) {
+                    SceDateTime now;
+                    getCurrentTime(&now);
+
+                    SceRtcTick nowTicks, modTicks;
+                    sceRtcGetTick(&now, &nowTicks);
+                    sceRtcGetTick(&stat.st_mtime, &modTicks);
+
+                    SceRtcTick thresholdTicks;
+                    sceRtcTickAddDays(&thresholdTicks, &modTicks, 60);
+
+                    if (sceRtcCompareTick(&nowTicks, &thresholdTicks) >= 0) {
+                        isOrphaned = 1;
+                    }
+                }
+            }
+
+            if (isOrphaned) {
+                total += dir.d_stat.st_size;
+            }
         }
     }
     sceIoDclose(dfd);
@@ -2062,7 +2266,7 @@ void findOrphanedLicenseFiles() {
 
             if (len == 20) {
                 char titleId[10] = {0};
-                strncpy(titleId, filename, 9);
+                memcpy(titleId, filename, 9);
                 titleId[9] = '\0';
                 if (!isAppInstalled(titleId)) {
                     isOrphaned = 1;
@@ -2101,10 +2305,6 @@ void findOrphanedLicenseFiles() {
     sceIoDclose(dfd);
 }
 
-// ============================================================
-// NEW: Empty LiveArea bubbles cleanup
-// Removes leftover bubble directories that have no app installed
-// ============================================================
 
 unsigned long long calculateEmptyLiveareaBubblesSize() {
     unsigned long long total = 0;
@@ -2130,9 +2330,7 @@ unsigned long long calculateEmptyLiveareaBubblesSize() {
             char dirName[MAX_FILENAME_LENGTH];
             safe_strncpy(dirName, dir.d_name, sizeof(dirName));
 
-            // Check if it's a TitleID directory (9 chars)
             if (strlen(dirName) == 9) {
-                // Check if subdirectories exist at all (might be empty bubble)
                 char fullPath[MAX_PATH_LENGTH];
                 safe_snprintf(fullPath, sizeof(fullPath), "%s%s", bubbleDirs[d], dirName);
 
@@ -2151,7 +2349,7 @@ unsigned long long calculateEmptyLiveareaBubblesSize() {
                     sceIoDclose(subDfd);
 
                     if (!hasContent && strlen(dirName) == 9 && !isAppInstalled(dirName)) {
-                        total += 0; // Empty folder, negligible size
+                        total += 0;
                     }
                 }
             }
@@ -2213,5 +2411,248 @@ void removeEmptyLiveareaBubbles() {
             }
         }
         sceIoDclose(dfd);
+    }
+}
+
+#define SETTINGS_FILE_PATH "ux0:data/PSV_Cleaner/settings.bin"
+#define SETTINGS_VERSION 1
+
+typedef struct {
+    int version;
+    int excludePictureFolder;
+    int excludeVpkFiles;
+    int excludeVitaDBCache;
+    int excludeVideoFolder;
+    int cleanVitaShell;
+    int cleanRetroArch;
+    int cleanAdrenaline;
+    int cleanBrowser;
+    int cleanSystem;
+    int cleanOrphanedData;
+    int cleanAllAppsTempFiles;
+    int cleanPkgi;
+    int cleanAutoplugin;
+    int cleanCrashDumps;
+    int cleanEasyVpK;
+    int cleanDaemon;
+    int cleanVitaGrafix;
+    int cleanOnemenu;
+    int cleanPCSX;
+    int cleanMGBA;
+    int cleanFlycast;
+    int cleanShellbat;
+    int cleanSwitchUser;
+    int cleanITLS;
+    int cleanVHBB;
+    int cleanPSVitaDB;
+    int cleanDownloadEnabler;
+    int cleanMoonlight;
+    int cleanRetroFlow;
+    int cleanHenkaku;
+    int cleanPSVshell;
+    int cleanCheatTools;
+    int cleanThemeCache;
+    int cleanNotificationCache;
+    int cleanActivityLog;
+    int cleanPhotoMusicCache;
+    int cleanSceShellCache;
+    int cleanFontCache;
+    int cleanRegistryTemp;
+    int cleanNetworkCache;
+    int cleanLicenseCache;
+    int cleanOrphanedLicenseFiles;
+    int cleanOrphanedDLC;
+    int cleanOrphanedAddcont;
+    int cleanEmptyLiveareaBubbles;
+} PersistentSettings;
+
+void loadSettings() {
+    PersistentSettings s;
+    SceUID fd = sceIoOpen(SETTINGS_FILE_PATH, SCE_O_RDONLY, 0777);
+    if (fd < 0) return;
+
+    int readSize = sceIoRead(fd, &s, sizeof(PersistentSettings));
+    sceIoClose(fd);
+
+    if (readSize != sizeof(PersistentSettings) || s.version != SETTINGS_VERSION) return;
+
+    excludePictureFolder = s.excludePictureFolder;
+    excludeVpkFiles = s.excludeVpkFiles;
+    excludeVitaDBCache = s.excludeVitaDBCache;
+    excludeVideoFolder = s.excludeVideoFolder;
+    cleanVitaShell = s.cleanVitaShell;
+    cleanRetroArch = s.cleanRetroArch;
+    cleanAdrenaline = s.cleanAdrenaline;
+    cleanBrowser = s.cleanBrowser;
+    cleanSystem = s.cleanSystem;
+    cleanOrphanedData = s.cleanOrphanedData;
+    cleanAllAppsTempFiles = s.cleanAllAppsTempFiles;
+    cleanPkgi = s.cleanPkgi;
+    cleanAutoplugin = s.cleanAutoplugin;
+    cleanCrashDumps = s.cleanCrashDumps;
+    cleanEasyVpK = s.cleanEasyVpK;
+    cleanDaemon = s.cleanDaemon;
+    cleanVitaGrafix = s.cleanVitaGrafix;
+    cleanOnemenu = s.cleanOnemenu;
+    cleanPCSX = s.cleanPCSX;
+    cleanMGBA = s.cleanMGBA;
+    cleanFlycast = s.cleanFlycast;
+    cleanShellbat = s.cleanShellbat;
+    cleanSwitchUser = s.cleanSwitchUser;
+    cleanITLS = s.cleanITLS;
+    cleanVHBB = s.cleanVHBB;
+    cleanPSVitaDB = s.cleanPSVitaDB;
+    cleanDownloadEnabler = s.cleanDownloadEnabler;
+    cleanMoonlight = s.cleanMoonlight;
+    cleanRetroFlow = s.cleanRetroFlow;
+    cleanHenkaku = s.cleanHenkaku;
+    cleanPSVshell = s.cleanPSVshell;
+    cleanCheatTools = s.cleanCheatTools;
+    cleanThemeCache = s.cleanThemeCache;
+    cleanNotificationCache = s.cleanNotificationCache;
+    cleanActivityLog = s.cleanActivityLog;
+    cleanPhotoMusicCache = s.cleanPhotoMusicCache;
+    cleanSceShellCache = s.cleanSceShellCache;
+    cleanFontCache = s.cleanFontCache;
+    cleanRegistryTemp = s.cleanRegistryTemp;
+    cleanNetworkCache = s.cleanNetworkCache;
+    cleanLicenseCache = s.cleanLicenseCache;
+    cleanOrphanedLicenseFiles = s.cleanOrphanedLicenseFiles;
+    cleanOrphanedDLC = s.cleanOrphanedDLC;
+    cleanOrphanedAddcont = s.cleanOrphanedAddcont;
+    cleanEmptyLiveareaBubbles = s.cleanEmptyLiveareaBubbles;
+}
+
+void saveSettings() {
+    PersistentSettings s;
+    memset(&s, 0, sizeof(PersistentSettings));
+
+    s.version = SETTINGS_VERSION;
+    s.excludePictureFolder = excludePictureFolder;
+    s.excludeVpkFiles = excludeVpkFiles;
+    s.excludeVitaDBCache = excludeVitaDBCache;
+    s.excludeVideoFolder = excludeVideoFolder;
+    s.cleanVitaShell = cleanVitaShell;
+    s.cleanRetroArch = cleanRetroArch;
+    s.cleanAdrenaline = cleanAdrenaline;
+    s.cleanBrowser = cleanBrowser;
+    s.cleanSystem = cleanSystem;
+    s.cleanOrphanedData = cleanOrphanedData;
+    s.cleanAllAppsTempFiles = cleanAllAppsTempFiles;
+    s.cleanPkgi = cleanPkgi;
+    s.cleanAutoplugin = cleanAutoplugin;
+    s.cleanCrashDumps = cleanCrashDumps;
+    s.cleanEasyVpK = cleanEasyVpK;
+    s.cleanDaemon = cleanDaemon;
+    s.cleanVitaGrafix = cleanVitaGrafix;
+    s.cleanOnemenu = cleanOnemenu;
+    s.cleanPCSX = cleanPCSX;
+    s.cleanMGBA = cleanMGBA;
+    s.cleanFlycast = cleanFlycast;
+    s.cleanShellbat = cleanShellbat;
+    s.cleanSwitchUser = cleanSwitchUser;
+    s.cleanITLS = cleanITLS;
+    s.cleanVHBB = cleanVHBB;
+    s.cleanPSVitaDB = cleanPSVitaDB;
+    s.cleanDownloadEnabler = cleanDownloadEnabler;
+    s.cleanMoonlight = cleanMoonlight;
+    s.cleanRetroFlow = cleanRetroFlow;
+    s.cleanHenkaku = cleanHenkaku;
+    s.cleanPSVshell = cleanPSVshell;
+    s.cleanCheatTools = cleanCheatTools;
+    s.cleanThemeCache = cleanThemeCache;
+    s.cleanNotificationCache = cleanNotificationCache;
+    s.cleanActivityLog = cleanActivityLog;
+    s.cleanPhotoMusicCache = cleanPhotoMusicCache;
+    s.cleanSceShellCache = cleanSceShellCache;
+    s.cleanFontCache = cleanFontCache;
+    s.cleanRegistryTemp = cleanRegistryTemp;
+    s.cleanNetworkCache = cleanNetworkCache;
+    s.cleanLicenseCache = cleanLicenseCache;
+    s.cleanOrphanedLicenseFiles = cleanOrphanedLicenseFiles;
+    s.cleanOrphanedDLC = cleanOrphanedDLC;
+    s.cleanOrphanedAddcont = cleanOrphanedAddcont;
+    s.cleanEmptyLiveareaBubbles = cleanEmptyLiveareaBubbles;
+
+    sceIoMkdir("ux0:data/PSV_Cleaner", 0777);
+    SceUID fd = sceIoOpen(SETTINGS_FILE_PATH, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+    if (fd >= 0) {
+        sceIoWrite(fd, &s, sizeof(PersistentSettings));
+        sceIoClose(fd);
+    }
+}
+
+volatile int g_bgTask = BG_TASK_IDLE;
+volatile int g_bgTaskDone = 1;
+FileList *g_bgPreviewList = NULL;
+AppList *g_bgAppList = NULL;
+SortMode g_bgSortMode = SORT_BY_NAME;
+char g_bgFileFilter[MAX_FILE_FILTER_LENGTH] = "";
+unsigned long long g_bgVisibleSize = 0;
+
+static volatile int g_bgRunning = 0;
+static SceUID g_bgThreadId = -1;
+
+static int bgWorkerThread(SceSize argc, void *argp) {
+    while (g_bgRunning) {
+        if (g_bgTask == BG_TASK_CALC_SIZE) {
+            g_cachedSpaceSize = calculateTempSize();
+            g_spaceCalculationNeeded = 0;
+            g_bgTask = BG_TASK_IDLE;
+            g_bgTaskDone = 1;
+        } else if (g_bgTask == BG_TASK_SCAN_PREVIEW) {
+            if (g_bgPreviewList) {
+                scanFilesForPreview(g_bgPreviewList);
+                filterAndSortFileList(g_bgPreviewList, g_bgSortMode, g_bgFileFilter, &g_bgVisibleSize);
+            }
+            g_bgTask = BG_TASK_IDLE;
+            g_bgTaskDone = 1;
+        } else if (g_bgTask == BG_TASK_SCAN_APPS) {
+            if (g_bgAppList) {
+                populateAppListWithSizes(g_bgAppList);
+            }
+            g_bgTask = BG_TASK_IDLE;
+            g_bgTaskDone = 1;
+        }
+        sceKernelDelayThread(8 * 1000);
+    }
+    sceKernelExitThread(0);
+    return 0;
+}
+
+void startBgWorker() {
+    if (g_bgThreadId >= 0) return;
+    g_bgRunning = 1;
+    g_bgThreadId = sceKernelCreateThread("psv_cleaner_bg", bgWorkerThread, 0x10000101, 0x40000, 0, 0, NULL);
+    if (g_bgThreadId >= 0) {
+        sceKernelStartThread(g_bgThreadId, 0, NULL);
+    } else {
+        g_bgRunning = 0;
+    }
+}
+
+void stopBgWorker() {
+    if (g_bgThreadId < 0) return;
+    g_bgRunning = 0;
+    requestEmergencyStop();
+    sceKernelWaitThreadEnd(g_bgThreadId, NULL, NULL);
+    sceKernelDeleteThread(g_bgThreadId);
+    g_bgThreadId = -1;
+    g_emergencyStop = 0;
+}
+
+void requestBgTask(BgTask task) {
+    if (!g_bgRunning || !g_bgTaskDone) return;
+    g_bgTaskDone = 0;
+    g_bgTask = task;
+}
+
+int isBgBusy() {
+    return g_bgRunning && !g_bgTaskDone;
+}
+
+void waitBgIdle() {
+    while (g_bgRunning && !g_bgTaskDone) {
+        sceKernelDelayThread(10 * 1000);
     }
 }

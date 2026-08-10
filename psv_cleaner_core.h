@@ -29,12 +29,13 @@
 } while(0)
 
 #define safe_strncat(dest, src, dest_size) do { \
-    if (dest_size > 0 && strlen(dest) < dest_size - 1) { \
-        size_t remaining = dest_size - strlen(dest) - 1; \
+    size_t dest_len = strlen(dest); \
+    if (dest_size > 0 && dest_len < dest_size - 1) { \
+        size_t remaining = dest_size - dest_len - 1; \
         size_t copy_len = strlen(src); \
         if (copy_len > remaining) copy_len = remaining; \
-        memcpy(dest + strlen(dest), src, copy_len); \
-        dest[strlen(dest) + copy_len] = '\0'; \
+        memcpy(dest + dest_len, src, copy_len); \
+        dest[dest_len + copy_len] = '\0'; \
     } \
 } while(0)
 
@@ -132,6 +133,9 @@ extern int cleanBrowser;
 extern int cleanSystem;
 extern int cleanOrphanedData;
 extern int cleanAllAppsTempFiles;
+extern int cleanPkgi;
+extern int cleanAutoplugin;
+extern int cleanCrashDumps;
 
 extern int cleanEasyVpK;
 extern int cleanDaemon;
@@ -205,6 +209,8 @@ void findOrphanedDLCData();
 unsigned long long calculateOrphanedAddcontSize();
 void findOrphanedAddcont();
 unsigned long long calculateOrphanedLicenseFilesSize();
+unsigned long long calculateOrphanedLicenseDirsSize();
+unsigned long long calculateOrphanedPatchDirsSize();
 void findOrphanedLicenseFiles();
 unsigned long long calculateEmptyLiveareaBubblesSize();
 void removeEmptyLiveareaBubbles();
@@ -232,6 +238,30 @@ void resetScanProgress();
 
 typedef void (*ProgressCallback)(int percent);
 extern ProgressCallback g_progressCallback;
+
+typedef enum {
+    BG_TASK_IDLE = 0,
+    BG_TASK_CALC_SIZE = 1,
+    BG_TASK_SCAN_PREVIEW = 2,
+    BG_TASK_SCAN_APPS = 3
+} BgTask;
+
+extern volatile int g_bgTask;
+extern volatile int g_bgTaskDone;
+extern FileList *g_bgPreviewList;
+extern AppList *g_bgAppList;
+extern SortMode g_bgSortMode;
+extern char g_bgFileFilter[MAX_FILE_FILTER_LENGTH];
+extern unsigned long long g_bgVisibleSize;
+
+void loadSettings();
+void saveSettings();
+
+void startBgWorker();
+void stopBgWorker();
+void requestBgTask(BgTask task);
+int isBgBusy();
+void waitBgIdle();
 
 #endif
 
