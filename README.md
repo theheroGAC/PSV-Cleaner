@@ -7,7 +7,7 @@
 
 **PSV Cleaner** is a powerful and user-friendly temporary files cleaner designed specifically for the PlayStation Vita homebrew community. This tool helps you free up valuable storage space by safely removing temporary files, cache data, and system dumps that accumulate over time.
 
-**Latest Version: 1.13** - Revolutionary intelligent caching system for 5x faster startup times!
+**Latest Version: 1.16** - Async cleaning: no more console freeze during clean operations!
 
 ---
 
@@ -120,6 +120,28 @@
 - Organize your Vita with regular maintenance  
 - Prevent storage issues before they become problems  
 - Extend your Vita's life with proper maintenance  
+
+---
+
+## Building
+
+Requirements: [VitaSDK](https://vitasdk.org) and CMake + Ninja under MSYS2.
+
+```bash
+export VITASDK='C:/msys64/usr/local/vitasdk'
+export TMP='C:/msys64/tmp' TEMP='C:/msys64/tmp' TMPDIR='C:/msys64/tmp'
+export PATH="/c/msys64/mingw64/bin:/c/msys64/usr/local/vitasdk/bin:$PATH"
+
+cd PSV-Cleaner
+rm -rf build && mkdir build && cd build
+cmake -G Ninja -DCMAKE_TOOLCHAIN_FILE='C:/msys64/usr/local/vitasdk/share/vita.toolchain.cmake' ..
+ninja
+```
+
+The output is `build/PSV_Cleaner.vpk` (ready to install) and `build/eboot.bin`.
+
+> **Note:** use the native (mingw64) CMake/Ninja — the MSYS2 build of CMake does not
+> inherit `VITASDK`/`TMP` from a Git Bash shell and fails with `Could not find CMAKE_ROOT`.
 
 ---
 

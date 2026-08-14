@@ -486,6 +486,10 @@ int getScanProgress() {
     return g_scanProgress;
 }
 
+int getLastProgressPercent() {
+    return g_lastProgressPercent;
+}
+
 void resetScanProgress() {
     g_scanProgress = 0;
     g_currentScanItem = 0;
@@ -678,50 +682,88 @@ void cleanupVpkFiles() {
     }
 }
 
-void deleteRecursive(const char *path) {
-    if (isEmergencyStopRequested()) return;
-    SceUID dfd;
-    dfd = sceIoDopen(path);
-    if (dfd >= 0) {
-        SceIoDirent *dir = malloc(sizeof(SceIoDirent));
-        if (!dir) {
-            sceIoDclose(dfd);
-            return;
+typedef struct {
+    char **names;
+    int count;
+    int capacity;
+} DirEntries;
+
+static int collectDirEntries(const char *path, DirEntries *entries) {
+    SceUID dfd = sceIoDopen(path);
+    if (dfd < 0) return 0;
+
+    SceIoDirent dir;
+    memset(&dir, 0, sizeof(SceIoDirent));
+
+    while (sceIoDread(dfd, &dir) > 0) {
+        if (strcmp(dir.d_name, ".") == 0 || strcmp(dir.d_name, "..") == 0)
+            continue;
+
+        if (entries->count >= entries->capacity) {
+            int newCap = entries->capacity ? entries->capacity * 2 : 64;
+            char **newNames = (char**)realloc(entries->names, sizeof(char*) * newCap);
+            if (!newNames) break;
+            entries->names = newNames;
+            entries->capacity = newCap;
         }
 
-        while (sceIoDread(dfd, dir) > 0) {
-            if (isEmergencyStopRequested()) break;
-            if (strcmp(dir->d_name, ".") == 0 || strcmp(dir->d_name, "..") == 0)
-                continue;
+        entries->names[entries->count] = strdup(dir.d_name);
+        if (entries->names[entries->count]) {
+            entries->count++;
+        }
+    }
+    sceIoDclose(dfd);
+    return 1;
+}
 
-            char *newPath = malloc(MAX_PATH_LENGTH);
-            if (!newPath) continue;
+void deleteRecursive(const char *path) {
+    if (isEmergencyStopRequested()) return;
 
-            snprintf(newPath, MAX_PATH_LENGTH, "%s%s%s", path,
-                     (path[strlen(path)-1] == '/') ? "" : "/",
-                     dir->d_name);
+    DirEntries entries;
+    memset(&entries, 0, sizeof(entries));
 
-            if (SCE_S_ISDIR(dir->d_stat.st_mode)) {
+    if (!collectDirEntries(path, &entries)) {
+        if (sceIoRemove(path) >= 0) {
+            g_deletedFilesCount++;
+        }
+        return;
+    }
+
+    for (int i = 0; i < entries.count; i++) {
+        if (isEmergencyStopRequested()) break;
+
+        char *newPath = malloc(MAX_PATH_LENGTH);
+        if (!newPath) {
+            free(entries.names[i]);
+            continue;
+        }
+
+        snprintf(newPath, MAX_PATH_LENGTH, "%s%s%s", path,
+                 (path[strlen(path)-1] == '/') ? "" : "/",
+                 entries.names[i]);
+
+        SceIoStat st;
+        if (sceIoGetstat(newPath, &st) >= 0) {
+            if (SCE_S_ISDIR(st.st_mode)) {
                 deleteRecursive(newPath);
                 sceIoRmdir(newPath);
             } else {
                 if (sceIoRemove(newPath) >= 0) {
                     g_deletedFilesCount++;
-                    if (g_progressCallback && (g_deletedFilesCount % 20) == 0) {
-                        g_progressCallback(g_lastProgressPercent);
-                    }
                 }
             }
-            free(newPath);
         }
-        sceIoDclose(dfd);
-        sceIoRmdir(path);
-        free(dir);
-    } else {
-        if (sceIoRemove(path) >= 0) {
-            g_deletedFilesCount++;
+
+        free(newPath);
+        free(entries.names[i]);
+
+        if ((i & 63) == 63) {
+            sceKernelDelayThread(1000 * 1000);
         }
     }
+
+    free(entries.names);
+    sceIoRmdir(path);
 }
 
 unsigned long long calculateTempSizeRecursive(const char *path) {
@@ -2586,6 +2628,8 @@ volatile int g_bgTask = BG_TASK_IDLE;
 volatile int g_bgTaskDone = 1;
 FileList *g_bgPreviewList = NULL;
 AppList *g_bgAppList = NULL;
+char g_bgCleanAppTitleId[16] = "";
+volatile unsigned long long g_bgSpaceFreed = 0;
 SortMode g_bgSortMode = SORT_BY_NAME;
 char g_bgFileFilter[MAX_FILE_FILTER_LENGTH] = "";
 unsigned long long g_bgVisibleSize = 0;
@@ -2611,6 +2655,14 @@ static int bgWorkerThread(SceSize argc, void *argp) {
             if (g_bgAppList) {
                 populateAppListWithSizes(g_bgAppList);
             }
+            g_bgTask = BG_TASK_IDLE;
+            g_bgTaskDone = 1;
+        } else if (g_bgTask == BG_TASK_CLEAN) {
+            cleanTemporaryFiles();
+            g_bgTask = BG_TASK_IDLE;
+            g_bgTaskDone = 1;
+        } else if (g_bgTask == BG_TASK_CLEAN_APP) {
+            g_bgSpaceFreed = cleanSingleAppTempFiles(g_bgCleanAppTitleId);
             g_bgTask = BG_TASK_IDLE;
             g_bgTaskDone = 1;
         }

@@ -13,7 +13,7 @@
 
 #define RGBA(r,g,b,a) ((a) << 24 | (r) << 16 | (g) << 8 | (b))
 
-#define APP_VERSION "v1.15"
+#define APP_VERSION "v1.16"
 
 #define COL_CARD        RGBA(30, 41, 59, 235)
 #define COL_CARD_SOLID  RGBA(30, 41, 59, 255)
@@ -35,29 +35,6 @@ static vita2d_pgf *g_draw_font = NULL;
 static int g_animFrame = 0;
 
 void drawProgressBar(vita2d_pgf *font, int percent);
-
-void updateCleanupProgress(int percent) {
-    SceCtrlData pad;
-    sceCtrlPeekBufferPositive(0, &pad, 1);
-    if (pad.buttons & SCE_CTRL_CIRCLE) {
-        requestEmergencyStop();
-    }
-
-    static int powerTickCounter = 0;
-    if (++powerTickCounter >= 30) {
-        powerTickCounter = 0;
-        sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DISABLE_AUTO_SUSPEND);
-    }
-
-    if (g_draw_font) {
-        g_animFrame++;
-        vita2d_start_drawing();
-        vita2d_clear_screen();
-        drawProgressBar(g_draw_font, percent);
-        vita2d_end_drawing();
-        vita2d_swap_buffers();
-    }
-}
 
 void gpuMemoryCleanup() {
     vita2d_wait_rendering_done();
@@ -759,6 +736,14 @@ void drawAppListScreen(vita2d_pgf *font, AppListState *appState, int scanning) {
     drawButtonHint(font, 640, 526, "O", "Back");
 }
 
+void drawAppCleaningScreen(vita2d_pgf *font) {
+    drawBackground();
+    drawHeader(font, "Cleaning App", "Removing temporary files");
+    drawSpinner(font, 480, 260, "Cleaning...");
+    drawFooterBar();
+    drawButtonHint(font, 380, 526, "O", "Emergency Stop");
+}
+
 void drawDeleteConfirmation(vita2d_pgf *font, PreviewState *preview) {
     vita2d_draw_rectangle(0, 0, 960, 544, RGBA(0, 0, 0, 170));
 
@@ -912,7 +897,7 @@ void startAppScan(AppListState *appState) {
 }
 
 void startSizeCalc() {
-    waitBgIdle();
+    if (isBgBusy()) return;
     requestBgTask(BG_TASK_CALC_SIZE);
 }
 
@@ -959,6 +944,9 @@ int main() {
 
     int previewScanning = 0;
     int appScanning = 0;
+    int cleaningInProgress = 0;
+    int appCleaningInProgress = 0;
+    int sizeCalcQueued = 0;
 
     int showMenu = 0;
     int showPreview = 0;
@@ -976,6 +964,77 @@ int main() {
         currentFrame++;
         g_animFrame++;
 
+        if (appCleaningInProgress && g_bgTaskDone) {
+            appCleaningInProgress = 0;
+            endOperation();
+
+            int cleanupCount = loadCleanupCounter() + 1;
+            saveCleanupCounter(cleanupCount);
+
+            int filesDeleted = getDeletedFilesCount();
+
+            char spaceText[32];
+            formatSize(g_bgSpaceFreed, spaceText, sizeof(spaceText));
+
+            vita2d_start_drawing();
+            vita2d_clear_screen();
+            drawAppCleanedScreen(font, appState.appList->apps[appState.selectedApp].titleId, spaceText, filesDeleted);
+            vita2d_end_drawing();
+            vita2d_swap_buffers();
+            sceKernelDelayThread(2 * 1000 * 1000);
+
+            startAppScan(&appState);
+            appScanning = 1;
+            sizeCalcQueued = 1;
+
+            spaceKnown = 0;
+            strcpy(spaceValueText, "Scanning...");
+        }
+
+        if (cleaningInProgress && g_bgTaskDone) {
+            cleaningInProgress = 0;
+            g_progressCallback = NULL;
+
+            int cleaningInterrupted = isEmergencyStopRequested();
+            endOperation();
+
+            int filesDeleted = getDeletedFilesCount();
+            char spaceText[32];
+            formatSize(preview.fileList ? preview.fileList->totalSize : 0, spaceText, sizeof(spaceText));
+
+            if (cleaningInterrupted) {
+                cleanupAfterEmergencyStop();
+
+                vita2d_start_drawing();
+                vita2d_clear_screen();
+                drawInterruptedScreen(font, spaceText, filesDeleted);
+                vita2d_end_drawing();
+                vita2d_swap_buffers();
+                sceKernelDelayThread(4 * 1000 * 1000);
+            } else {
+                int cleanupCount = loadCleanupCounter() + 1;
+                saveCleanupCounter(cleanupCount);
+
+                showNotification("PSV Cleaner", "Cleaning completed successfully!");
+
+                vita2d_start_drawing();
+                vita2d_clear_screen();
+                drawCompletionScreen(font, cleanupCount, spaceText, filesDeleted);
+                vita2d_end_drawing();
+                vita2d_swap_buffers();
+                sceKernelDelayThread(3 * 1000 * 1000);
+            }
+
+            if (preview.fileList) {
+                freeFileList(preview.fileList);
+                preview.fileList = NULL;
+            }
+
+            spaceKnown = 0;
+            strcpy(spaceValueText, "Scanning...");
+            startSizeCalc();
+        }
+
         if (g_bgTaskDone) {
             if (previewScanning) {
                 previewScanning = 0;
@@ -986,22 +1045,31 @@ int main() {
                 appScanning = 0;
                 g_bgAppList = NULL;
             }
-            formatSize(g_cachedSpaceSize, spaceValueText, sizeof(spaceValueText));
-            spaceKnown = 1;
+            if (sizeCalcQueued) {
+                sizeCalcQueued = 0;
+                requestBgTask(BG_TASK_CALC_SIZE);
+            } else {
+                formatSize(g_cachedSpaceSize, spaceValueText, sizeof(spaceValueText));
+                spaceKnown = 1;
+            }
         }
 
         if (g_bgTaskDone && currentFrame % 300 == 0) {
             requestBgTask(BG_TASK_CALC_SIZE);
         }
 
-        if ((previewScanning || appScanning) && currentFrame % 120 == 0) {
+        if ((previewScanning || appScanning || cleaningInProgress || appCleaningInProgress) && currentFrame % 120 == 0) {
             sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DISABLE_AUTO_SUSPEND);
         }
 
         vita2d_start_drawing();
         vita2d_clear_screen();
 
-        if (showCleanAllConfirmation) {
+        if (cleaningInProgress) {
+            drawProgressBar(font, getLastProgressPercent());
+        } else if (appCleaningInProgress) {
+            drawAppCleaningScreen(font);
+        } else if (showCleanAllConfirmation) {
             drawPreviewScreen(font, &preview, previewScanning);
             drawCleanAllConfirmation(font, preview.fileList);
         } else if (showDeleteConfirmation) {
@@ -1024,7 +1092,11 @@ int main() {
 
         gpuMemoryCleanup();
 
-        if (showProfileSelect) {
+        if (cleaningInProgress || appCleaningInProgress) {
+            if (pad.buttons & SCE_CTRL_CIRCLE) {
+                requestEmergencyStop();
+            }
+        } else if (showProfileSelect) {
             if (pad.buttons & SCE_CTRL_UP) {
                 int p = (int)selectedProfile - 1;
                 if (p < 0) p = 2;
@@ -1059,60 +1131,16 @@ int main() {
                 if (preview.fileList && preview.fileList->count > 0) {
                     showCleanAllConfirmation = 0;
                     showPreview = 0;
+                    cleaningInProgress = 1;
 
                     waitBgIdle();
                     sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DISABLE_AUTO_SUSPEND);
 
                     resetScanProgress();
-
-                    g_draw_font = font;
-                    g_progressCallback = updateCleanupProgress;
-
-                    startOperation();
-
-                    cleanTemporaryFiles();
-
                     g_progressCallback = NULL;
 
-                    int cleaningInterrupted = isEmergencyStopRequested();
-
-                    endOperation();
-
-                    int filesDeleted = getDeletedFilesCount();
-                    char spaceText[32];
-                    formatSize(preview.fileList ? preview.fileList->totalSize : 0, spaceText, sizeof(spaceText));
-
-                    if (cleaningInterrupted) {
-                        cleanupAfterEmergencyStop();
-
-                        vita2d_start_drawing();
-                        vita2d_clear_screen();
-                        drawInterruptedScreen(font, spaceText, filesDeleted);
-                        vita2d_end_drawing();
-                        vita2d_swap_buffers();
-                        sceKernelDelayThread(4 * 1000 * 1000);
-                    } else {
-                        int cleanupCount = loadCleanupCounter() + 1;
-                        saveCleanupCounter(cleanupCount);
-
-                        showNotification("PSV Cleaner", "Cleaning completed successfully!");
-
-                        vita2d_start_drawing();
-                        vita2d_clear_screen();
-                        drawCompletionScreen(font, cleanupCount, spaceText, filesDeleted);
-                        vita2d_end_drawing();
-                        vita2d_swap_buffers();
-                        sceKernelDelayThread(3 * 1000 * 1000);
-                    }
-
-                    if (preview.fileList) {
-                        freeFileList(preview.fileList);
-                        preview.fileList = NULL;
-                    }
-
-                    spaceKnown = 0;
-                    strcpy(spaceValueText, "Scanning...");
-                    startSizeCalc();
+                    startOperation();
+                    requestBgTask(BG_TASK_CLEAN);
                 }
                 sceKernelDelayThread(200 * 1000);
             }
@@ -1162,37 +1190,21 @@ int main() {
                     if (appState.appList && appState.appList->count > 0 &&
                         appState.selectedApp >= 0 && appState.selectedApp < appState.appList->count) {
 
+                        appCleaningInProgress = 1;
+
+                        waitBgIdle();
+                        sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DISABLE_AUTO_SUSPEND);
+
+                        resetDeletedFilesCount();
+                        g_progressCallback = NULL;
+
                         startOperation();
-
-                        unsigned long long spaceFreed = cleanSingleAppTempFiles(
-                            appState.appList->apps[appState.selectedApp].titleId);
-
-                        endOperation();
-
-                        int cleanupCount = loadCleanupCounter() + 1;
-                        saveCleanupCounter(cleanupCount);
-
-                        int filesDeleted = getDeletedFilesCount();
-
-                        char spaceText[32];
-                        formatSize(spaceFreed, spaceText, sizeof(spaceText));
-
-                        vita2d_start_drawing();
-                        vita2d_clear_screen();
-                        drawAppCleanedScreen(font, appState.appList->apps[appState.selectedApp].titleId, spaceText, filesDeleted);
-                        vita2d_end_drawing();
-                        vita2d_swap_buffers();
-                        sceKernelDelayThread(2 * 1000 * 1000);
-
-                        startAppScan(&appState);
-                        appScanning = 1;
-
-                        spaceKnown = 0;
-                        strcpy(spaceValueText, "Scanning...");
-                        startSizeCalc();
-
-                        sceKernelDelayThread(200 * 1000);
+                        safe_strncpy(g_bgCleanAppTitleId,
+                                     appState.appList->apps[appState.selectedApp].titleId,
+                                     sizeof(g_bgCleanAppTitleId));
+                        requestBgTask(BG_TASK_CLEAN_APP);
                     }
+                    sceKernelDelayThread(200 * 1000);
                 }
                 if (pad.buttons & SCE_CTRL_CIRCLE) {
                     appState.showAppList = 0;

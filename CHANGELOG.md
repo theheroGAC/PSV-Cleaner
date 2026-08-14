@@ -1,5 +1,18 @@
 # PSV Cleaner Changelog
 
+## Version 1.16 - August 14, 2026
+
+### Fixed
+- **Console freeze during cleaning**: cleaning now runs on a background worker thread. The UI keeps rendering and reading input during Quick Clean, Complete Clean, Selective Clean and per-app cleaning — no more frozen screen.
+- **Emergency stop always responsive**: the Circle button is polled every frame during cleaning, even on very large directories.
+- **Safer deletion**: `deleteRecursive` no longer deletes files while iterating the same open directory handle (entries are collected first), which could stall `sceIoDread` on FAT/exFAT; added periodic yields.
+- **Non-blocking space refresh**: the space calculation no longer blocks the main loop while waiting for the app rescan.
+
+### Changed
+- Version bumped to 1.16.
+
+---
+
 ## Version 1.07 - November 11, 2025
 
 Big update! Added a ton of new features that make cleaning way more useful and fun.

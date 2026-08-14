@@ -234,6 +234,7 @@ void cleanupAfterEmergencyStop();
 void initScanProgress(int totalItems);
 void updateScanProgress(int currentItem);
 int getScanProgress();
+int getLastProgressPercent();
 void resetScanProgress();
 
 typedef void (*ProgressCallback)(int percent);
@@ -243,13 +244,17 @@ typedef enum {
     BG_TASK_IDLE = 0,
     BG_TASK_CALC_SIZE = 1,
     BG_TASK_SCAN_PREVIEW = 2,
-    BG_TASK_SCAN_APPS = 3
+    BG_TASK_SCAN_APPS = 3,
+    BG_TASK_CLEAN = 4,
+    BG_TASK_CLEAN_APP = 5
 } BgTask;
 
 extern volatile int g_bgTask;
 extern volatile int g_bgTaskDone;
 extern FileList *g_bgPreviewList;
 extern AppList *g_bgAppList;
+extern char g_bgCleanAppTitleId[16];
+extern volatile unsigned long long g_bgSpaceFreed;
 extern SortMode g_bgSortMode;
 extern char g_bgFileFilter[MAX_FILE_FILTER_LENGTH];
 extern unsigned long long g_bgVisibleSize;
