@@ -1,5 +1,21 @@
 # PSV Cleaner Changelog
 
+## Version 1.17 - September 26, 2026
+
+### Added
+- **Storage Analyzer**: Detailed volume analysis for `ux0:`, `ur0:`, `uma0:`, and `imc0:`. Displays total/used/free space, category breakdown (app, patch, addcont, data, license, tai, temp), and top largest directories.
+- **Smart Clean**: Comprehensive intelligent cleanup system that scans system caches, crash dumps, and unneeded temp files across partitions with an interactive pre-clean preview and post-clean metrics report.
+- **Orphan Scanner**: Identifies leftover directories and files from previously uninstalled games, patches, DLCs, and homebrews across `ux0:data/`, `ux0:patch/`, `ux0:addcont/`, `ux0:appmeta/`, and `ux0:license/`. Includes support for homebrew data directories with manual confirmation.
+- **Safety Engine**: Robust multi-tier verification (`SAFE`, `REGENERABLE`, `ORPHANED`, `REVIEW`, `PROTECTED`). Absolutely protects system volumes (`os0:`, `vs0:`), plugins (`tai/`), active game assets, and user save data (`ux0:user/00/savedata/`).
+- **Tools Menu**: Dedicated launcher accessible via `L-trigger` from the main dashboard for quick navigation to Storage Analyzer, Smart Clean, and Orphan Scanner.
+
+### Improved & Fixed
+- **UI & Layout Enhancements**: Widened information cards and optimized typography across Storage Analyzer, Smart Clean Preview, and Orphan Scanner to prevent any text clipping or overflow on the 960x544 display.
+- **High-Performance Non-Blocking Scans**: Directory traversal uses iterative bounded slot arrays and cooperative CPU yields, preventing memory bloat and keeping Emergency Stop immediately responsive even on massive storages.
+- **Deletion Efficiency**: Minimized delay cycles during bulk file deletions while preserving UI interactivity and safe abort capability.
+
+---
+
 ## Version 1.16 - August 14, 2026
 
 ### Fixed
