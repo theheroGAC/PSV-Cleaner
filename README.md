@@ -5,125 +5,127 @@
 ![GitHub issues](https://img.shields.io/github/issues/theheroGAC/PSV-Cleaner)
 ![GitHub stars](https://img.shields.io/github/stars/theheroGAC/PSV-Cleaner?style=social)
 
-**PSV Cleaner** is a powerful and user-friendly temporary files cleaner designed specifically for the PlayStation Vita homebrew community. This tool helps you free up valuable storage space by safely removing temporary files, cache data, and system dumps that accumulate over time.
+**PSV Cleaner** is an advanced maintenance utility and temporary files cleaner designed specifically for the PlayStation Vita homebrew community. This tool helps you keep your console organized and recover valuable storage space by safely removing caches, crash dumps, and unneeded leftovers from uninstalled applications.
 
-**Latest Version: 1.16** - Async cleaning: no more console freeze during clean operations!
+**Latest Version: 1.17** – Advanced Storage Maintenance: Storage Analyzer, Smart Clean with Pre-Clean Preview & Reports, Orphan Scanner for deleted apps/DLCs/patches, and a Multi-Tier Safety Engine protecting system files and user savedata!
 
 ---
 
 ## Key Features
 
-- **Comprehensive Cleaning** – Removes 90+ types of temporary files including system cache, homebrew logs, and application data.
-- **Safe & Secure** – Only deletes temporary files, never touches your games, saves, or important data.
-- **Emergency Stop** – Safely interrupt cleaning operations at any time with the Circle button.
-- **File Preview** – See exactly which files will be deleted before cleaning with detailed list view.
-- **Selective Cleaning** – Choose what to clean with an intuitive options menu.
-- **Real-time Statistics** – See exactly how much space you can free before cleaning with recursive calculation.
-- **Modern Interface** – Clean, professional UI with smooth animations and scrollable file list.
-- **GPU Optimized** – Designed to prevent crashes and ensure stable performance.
+- **Storage Analyzer** – Full partition overview for `ux0:`, `ur0:`, `uma0:`, and `imc0:`. Inspect capacity, used/free space, detailed directory categories (`app`, `data`, `patch`, `addcont`, `license`, `tai`, `temp`), and top largest folders.
+- **Smart Clean** – Intelligent, multi-category maintenance mode. Scans system caches, crash dumps, and temp files with an interactive pre-clean preview and comprehensive post-cleanup metrics report.
+- **Orphan Scanner** – Identifies abandoned directories and files from previously uninstalled games, patches, DLCs, and homebrews across `ux0:data/`, `ux0:patch/`, `ux0:addcont/`, `ux0:appmeta/`, and `ux0:license/`.
+- **Multi-Tier Safety Engine (`psv_cleaner_safety`)** – Every path is validated and categorized (`SAFE`, `REGENERABLE`, `ORPHANED`, `REVIEW`, `PROTECTED`). System volumes (`os0:`, `vs0:`), plugin directories (`tai/`), active game assets, and user save data (`ux0:user/00/savedata/`) are strictly protected and immune from deletion.
+- **Tools Menu (L Trigger)** – Dedicated tools launcher accessible directly from the dashboard to easily open the Storage Analyzer, Smart Clean, or Orphan Scanner.
+- **Emergency Stop** – Safely interrupt cleaning or scanning operations at any time ($\Delta$ or $\bigcirc$) with immediate, non-blocking responsiveness.
+- **Asynchronous & Non-Blocking** – All scans and deletions run on dedicated background threads with cooperative scheduling, keeping the UI rendering at a fluid 60 FPS with zero console freezes even on 512GB+ storages.
+- **Classic Cleaning Modes** – Includes Quick Clean, Complete Clean, Selective Clean (custom toggles), and Per-App Cleaning.
 
 ---
 
 ## What It Cleans
 
-### System Files
-- System temporary files and cache  
-- System logs and SQLite temporary databases  
-- System update and patch temporary files  
-- Shader compilation logs  
+### System & Operating Environment
+- System temporary files, caches, and runtime buffers  
+- System logs, error reports, and SQLite temporary databases  
+- System update, package install, and patch temporary files  
+- Shader compilation logs and runtime dumps  
 
-### File Managers & Package Installers
-- VitaShell file manager cache, logs, and trash  
-- PKGi package installer temporary files and cache  
-- Package installation temporary files  
-- App metadata temporary files  
+### Crash & Core Dumps
+- Core dump files (`psp2core`, `psp2dmp`, `.psp2dmp.tmp`)  
+- Adrenaline PSP emulator crash dumps and logs  
 
-### Emulators
-- RetroArch emulator cache, logs, and shader cache  
-- Adrenaline PSP emulator cache and crash dumps  
-- PSP emulator temporary files  
+### Package Installers & File Managers
+- VitaShell file manager cache, trash bin, and temporary archives  
+- PKGi / PKGj temporary downloads, package buffers, and image caches  
+- Package installation temp folders and app metadata fragments  
 
-### Homebrew Applications
-- VitaGrafix, reF00D, NoNpDrm cache  
-- Autoplugin 1 & 2 cache and logs  
-- PSVshell, SaveManager logs  
-- VitaCheat, rinCheat, TropHAX logs  
-- Henkaku, TAI, 0syscall6 cache  
-- Moonlight streaming cache  
+### Emulators & Homebrew Applications
+- RetroArch emulator cache, runtime logs, and shader cache  
+- VitaGrafix, reF00D, and NoNpDrm caches  
+- Autoplugin 1 & 2 cache and installation logs  
+- PSVshell, SaveManager, VitaCheat, rinCheat, and TropHAX logs  
+- Henkaku, TAI, and 0syscall6 caches  
+- Moonlight streaming caches and temporary icons  
+- PCSX ReARMed, mGBA, and Flycast logs and temporary caches  
 
 ### Media & Web
-- Browser and WebKit cache  
-- Picture, video, music thumbnails (regenerable)  
-- Network temporary files  
+- Browser history, WebKit cache, and cookies  
+- Picture, video, and music thumbnails (regenerable)  
+- Network temporary files and download buffers  
 
-### Other
-- Crash dump files (`psp2core`, `psp2dmp`)  
-- USB/SD card storage temporary files  
-- Background download temporary files  
-- License temporary files  
+### Orphaned Data (Residual Files)
+- Leftover data folders of uninstalled games in `ux0:data/`  
+- Leftover game patches in `ux0:patch/` and DLC expansions in `ux0:addcont/`  
+- Orphaned `.rif` license files and unused app metadata  
 
 ---
 
-## Easy to Use
+## Controls & Usage
 
-1. Launch the application.
-2. View how much space can be freed (calculated recursively).
-3. Press **X** to preview all files that will be deleted.
-4. Review the detailed file list with sizes.
-5. Press **X** again to confirm and start cleaning.
-6. **Emergency Stop**: Press **Circle** during cleaning to safely interrupt the operation.
-7. Watch the progress bar complete.
-8. See results and updated space available.
+### Startup Mode Select
+When launching the app, you are directly presented with the **Mode Selector**:
+* **Quick Clean**: Fast removal of caches and logs.
+* **Complete Clean**: Deep cleanup of all temp files, crash dumps, and system caches.
+* **Selective Clean**: Custom toggle of categories.
+* **Smart Clean**: Multi-category intelligent scan with space preview and reports.
+* **Orphan Scanner**: Detection and cleanup of uninstalled games & DLC data.
+* **Storage Analyzer**: Full visual partition and large folders explorer.
+* **X**: Launch selected mode | **O**: Close selector and access Main Dashboard.
 
-**Optional:** Press **Triangle** on main screen to access selective cleaning options.
+### Main Dashboard
+* **□**: Reopen **Mode Select** menu.
+* **X**: Start scan & cleaning preview.
+* **△**: Access selective cleaning options menu.
+* **SEL**: Open Per-App cleaning menu.
+* **L**: Open the dedicated **Tools Menu**.
+* **O / START**: Exit PSV Cleaner.
+
+### Tools Menu (`L` Trigger)
+1. **Storage Analyzer**:
+   * **← / → (or L / R)**: Switch active storage volume (`ux0:`, `ur0:`, `uma0:`, `imc0:`).
+   * **X**: Refresh volume scan.
+   * **O**: Return to Tools Menu.
+2. **Smart Clean**:
+   * Automatic scan across system partitions.
+   * Review the **Preview Screen** (Temporary, Cache, Crash Dumps, Orphaned space).
+   * Press **X** to execute cleanup or **O** to cancel.
+   * Review final metrics on the **Completion Report**.
+3. **Orphan Scanner**:
+   * Scans for orphaned folders and files left by deleted games.
+   * **↑ / ↓**: Navigate through orphan entries.
+   * **X**: Toggle selection for review items.
+   * **START**: Confirm and delete selected orphans.
+   * **O**: Back to Tools Menu.
+
+### Emergency Stop
+* Press **$\Delta$** or **$\bigcirc$** during any scanning or deletion operation to safely halt the process immediately.
 
 ---
 
 ## Safety First
 
-✅ **100% Safe** – Only removes temporary files  
-✅ **No data loss** – Games, saves, and configs are never touched  
-✅ **Preview before delete** – See exactly what will be removed  
-✅ **Automatic permissions** – Handles locked files safely  
-✅ **Crash protection** – GPU-optimized to prevent system crashes  
-✅ **Smart calculation** – Recursive scanning finds all temporary files  
+✅ **Multi-Tier Classification** – Automatically discriminates safe cache from files requiring user review.  
+✅ **Zero Data Loss Guarantee** – Savedata (`ux0:user/00/savedata/`) and active games are strictly protected.  
+✅ **System Volume Immunity** – Hardware and OS partitions (`os0:`, `vs0:`, `vd0:`, `sa0:`) cannot be deleted.  
+✅ **Live Preview Before Action** – See the exact number of files and recovered gigabytes before approving.  
+✅ **Non-Destructive Scanning** – Read-only scans ensure zero accidental modifications during analysis.  
 
 ---
 
 ## Technical Details
 
-- **Platform:** PlayStation Vita (all models)
-- **Requirements:** Henkaku/Enso homebrew support
-- **Size:** Small footprint, efficient memory usage
-- **Performance:** 60 FPS, GPU-optimized rendering
-- **File Scanning:** Recursive directory scanning with dynamic memory allocation
-- **Preview System:** Scrollable list supporting thousands of files
-- **Languages:** English (default)
-- **Compatibility:** Works with 20+ homebrew applications including VitaShell, PKGi, RetroArch, Adrenaline, and more
+- **Platform:** PlayStation Vita / PlayStation TV (Henkaku/Enso)
+- **Engine:** vita2d with hardware-accelerated GXM rendering
+- **Thread Architecture:** Asynchronous worker threads with thread-safe request queues
+- **Scan Walker:** Bounded iterative slot traversal (512 slots) preventing stack overflows
+- **Safety Module:** Dynamic path inspection with case-insensitive Fat/exFAT normalization
+- **Storage Compatibility:** Supports internal storage (`imc0:`), official Sony memory cards, and SD2Vita / USB storage (`ux0:`, `uma0:`, `ur0:`)
 
 ---
 
-## Perfect For
-
-- Homebrew users who want to free up space  
-- RetroArch players with large cache files  
-- PKGi users with accumulated temporary files  
-- VitaShell users with file manager cache  
-- Anyone who wants a cleaner, faster PS Vita  
-
----
-
-## Benefits
-
-- Free up storage space for more games and apps  
-- Improve system performance by removing clutter  
-- Organize your Vita with regular maintenance  
-- Prevent storage issues before they become problems  
-- Extend your Vita's life with proper maintenance  
-
----
-
-## Building
+## Building from Source
 
 Requirements: [VitaSDK](https://vitasdk.org) and CMake + Ninja under MSYS2.
 
@@ -138,85 +140,34 @@ cmake -G Ninja -DCMAKE_TOOLCHAIN_FILE='C:/msys64/usr/local/vitasdk/share/vita.to
 ninja
 ```
 
-The output is `build/PSV_Cleaner.vpk` (ready to install) and `build/eboot.bin`.
-
-> **Note:** use the native (mingw64) CMake/Ninja — the MSYS2 build of CMake does not
-> inherit `VITASDK`/`TMP` from a Git Bash shell and fails with `Could not find CMAKE_ROOT`.
+The build produces `build/PSV_Cleaner.vpk` (ready to install on PS Vita) and `build/eboot.bin`.
 
 ---
 
 ## Installation
 
-1. Download the VPK file.  
-2. Install using VitaShell or PKGi.  
-3. Launch from LiveArea.  
-4. Start cleaning immediately!  
-
----
-
-## Important Notes
-
-- Backup important data before first use (though it's safe, it's always good practice)
-- Works best with regular use to maintain optimal performance
-- Compatible with all major PS Vita homebrew applications
+1. Download the latest `PSV_Cleaner.vpk` from the Releases section.
+2. Transfer it to your PS Vita and install it using **VitaShell**.
+3. Launch **PSV Cleaner** from the LiveArea.
 
 ---
 
 ## Credits
 
-###  Original Creator & Lead Developer
-**theheroGAC** - Project founder and primary developer of PSV Cleaner
+### Original Creator & Lead Developer
+* **theheroGAC** – Project founder and primary developer of PSV Cleaner.
 
-###  Development Team
-**theheroGAC** - Core development and maintenance
-**PS Vita Homebrew Community** - Beta testing, feedback, and feature suggestions
+### Development Team & Contributors
+* **theheroGAC** – Core development and maintenance.
+* **PS Vita Homebrew Community** – Beta testing, feedback, suggestions, and ongoing support.
 
-###  Technical Infrastructure
-
-#### **VitaSDK Developers & Contributors**
-- **The VitaSDK Team** - Primary developers and maintainers of the VitaSDK
-- **VitaSDK Contributors** - Hundreds of contributors to libraries, documentation, and tools
-- **Open-source Contributors** - Community developers providing VitaSDK enhancements
-- **Documentation Writers** - For the comprehensive VitaSDK documentation
-- **VitaSDK Library Maintainers** - Keeping libraries up-to-date and functional
-
-#### **Compiler & Toolchain Developers**
-- **GCC ARM Toolchain Developers** - For the cross-compilation tools
-- **CMake Developers** - Build system that enables Vita development
-- **Open-source Tooling Contributors** - All the tools that make Vita development possible
-
-###  Special Acknowledgments
-
-**To the entire PS Vita homebrew community** - Without the dedication of thousands of developers, reverse engineers, researchers, and enthusiasts, PS Vita homebrew wouldn't exist. This project is built upon years of collective effort to keep the PS Vita alive and thriving.
-
-**To the developers of VitaSDK** - For creating and maintaining the most advanced Vita development toolkit available, making projects like PSV Cleaner possible.
-
-**To the original HEN creators (Yifan Lu, Davee, Proxima, and the Team Molecule crew)** - For opening the door to modern PS Vita homebrew.
-
-**To Rinnegatamante** - For pioneering many PS Vita applications and plugins that serve as the foundation for modern homebrew.
-
-**To you, the user** - For choosing PSV Cleaner to maintain your PS Vita and supporting the homebrew community!
-
-###  Acknowledgments
-PSV Cleaner represents the culmination of community-driven innovation. Every developer, every contributor, every tester, and every user who has supported PS Vita homebrew has played a role in making tools like this possible. The PS Vita lives on because of people like you.
-
-**Thank you for being part of the PS Vita homebrew revolution! 
+### Technical Infrastructure & Special Acknowledgments
+* **The VitaSDK Team & Contributors** – For providing and maintaining the open-source VitaSDK toolchain.
+* **Original HEN Creators** (Yifan Lu, Davee, Proxima, Team Molecule) – For opening the door to modern PS Vita homebrew.
+* **Rinnegatamante** – For vita2d and pioneering essential PS Vita libraries and tools.
 
 ---
 
 ## License
 
-This software is freely distributable for all purposes and uses, provided that:
-- All credits to the original creator **theheroGAC** must be preserved
-- The acknowledgment of VitaSDK developers and the homebrew community is maintained
-- No modifications that remove or alter the credits are permitted
-
-**Freedom with Responsibility** - Use, share, and enjoy PSV Cleaner while respecting the effort and contributions that made it possible!
-
----
-
-## Community
-
-This tool is developed for the PlayStation Vita homebrew community and is completely free to use. No ads, no tracking, just a clean and efficient way to maintain your PS Vita.
-
-**Download now and give your PlayStation Vita the cleaning it deserves!**
+This software is freely distributable for all purposes and uses, provided that all credits to the original creator **theheroGAC**, VitaSDK developers, and the PS Vita homebrew community are preserved.

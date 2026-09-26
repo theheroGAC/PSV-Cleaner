@@ -15,7 +15,7 @@ include("${VITASDK}/share/vita.cmake" REQUIRED)
 # Info app
 set(VITA_APP_NAME "PSV Cleaner")
 set(VITA_TITLEID "CLEAN0000")
-set(VITA_VERSION "01.16")
+set(VITA_VERSION "01.17")
 
 # Flags C
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wl,-q -Wall -fno-lto")
@@ -27,6 +27,8 @@ include_directories(${PROJECT_SOURCE_DIR})
 add_executable(${PROJECT_NAME}
     psv_cleaner_ui.c
     psv_cleaner_core.c
+    psv_cleaner_safety.c
+    psv_cleaner_maintenance.c
 )
 
 # Librerie VitaSDK
@@ -39,6 +41,8 @@ target_link_libraries(${PROJECT_NAME}
     ScePgf_stub
     SceAppMgr_stub
     SceCommonDialog_stub
+    SceIofilemgr_stub
+    SceRtc_stub
     png16
     z
     m

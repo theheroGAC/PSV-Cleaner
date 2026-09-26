@@ -13,7 +13,7 @@
 
 #define RGBA(r,g,b,a) ((a) << 24 | (r) << 16 | (g) << 8 | (b))
 
-#define APP_VERSION "v1.16"
+#define APP_VERSION "v1.17"
 
 #define COL_CARD        RGBA(30, 41, 59, 235)
 #define COL_CARD_SOLID  RGBA(30, 41, 59, 255)
@@ -270,7 +270,10 @@ typedef struct {
 typedef enum {
     PROFILE_QUICK = 0,
     PROFILE_COMPLETE,
-    PROFILE_SELECTIVE
+    PROFILE_SELECTIVE,
+    PROFILE_SMART,
+    PROFILE_ORPHAN,
+    PROFILE_ANALYZER
 } CleaningProfile;
 
 void syncMenuToGlobals(MenuOptions *menu) {
@@ -468,6 +471,9 @@ void initMenuOptions(MenuOptions *menu, CleaningProfile profile) {
         case PROFILE_SELECTIVE:
             syncGlobalsToMenu(menu);
             break;
+
+        default:
+            break;
     }
 
     syncMenuToGlobals(menu);
@@ -503,44 +509,67 @@ void drawMainScreen(vita2d_pgf *font, const char *spaceText, int spaceKnown) {
     }
 
     drawFooterBar();
-    drawButtonHint(font, 40, 526, "□", "Profile");
+    drawButtonHint(font, 40, 526, "□", "Modes");
     drawButtonHint(font, 190, 526, "X", "Preview & Clean");
-    drawButtonHint(font, 450, 526, "△", "Options");
-    drawButtonHint(font, 630, 526, "SEL", "Apps");
-    drawButtonHint(font, 810, 526, "O", "Exit");
+    drawButtonHint(font, 410, 526, "△", "Options");
+    drawButtonHint(font, 550, 526, "SEL", "Apps");
+    drawButtonHint(font, 710, 526, "L", "Tools");
+    drawButtonHint(font, 830, 526, "O", "Exit");
 }
 
 void drawProfileSelect(vita2d_pgf *font, CleaningProfile selected) {
     drawBackground();
-    drawHeader(font, "Select Cleaning Profile", "Choose how deep the cleanup should go");
+    drawHeader(font, "Select Mode", "Choose a cleaning profile or maintenance tool");
 
-    const char* names[] = {"Quick Clean", "Complete Clean", "Selective Clean"};
+    const char* names[] = {
+        "Quick Clean",
+        "Complete Clean",
+        "Selective Clean",
+        "Smart Clean",
+        "Orphan Scanner",
+        "Storage Analyzer"
+    };
     const char* descs[] = {
         "Removes app caches, browser temp and logs (fast & safe)",
         "Removes all temp files, crash dumps and system cache",
-        "Manually choose which categories to clean"
+        "Manually choose which categories to clean",
+        "Deep multi-category scan with space preview & reports",
+        "Detect and safely remove leftover data from deleted games",
+        "Storage breakdown and largest directories explorer"
+    };
+    const char* tags[] = {
+        "FAST",
+        "DEEP",
+        "CUSTOM",
+        "SMART",
+        "ORPHAN",
+        "STORAGE"
     };
 
-    for (int i = 0; i < 3; i++) {
-        int y = 135 + i * 105;
+    for (int i = 0; i < 6; i++) {
+        int y = 116 + i * 62;
         int isSelected = (i == (int)selected);
 
-        vita2d_draw_rectangle(200, y, 560, 86, isSelected ? COL_CARD_SOLID : COL_CARD);
-        drawCardBorder(200, y, 560, 86, isSelected ? COL_ACCENT : COL_BORDER);
+        vita2d_draw_rectangle(130, y, 700, 56, isSelected ? COL_CARD_SOLID : COL_CARD);
+        drawCardBorder(130, y, 700, 56, isSelected ? COL_ACCENT : COL_BORDER);
 
         if (isSelected) {
-            vita2d_draw_rectangle(201, y + 1, 5, 84, COL_ACCENT);
-            vita2d_draw_rectangle(201, y + 1, 558, 84, COL_ACCENT_SOFT);
+            vita2d_draw_rectangle(131, y + 1, 4, 54, COL_ACCENT);
+            vita2d_draw_rectangle(131, y + 1, 698, 54, COL_ACCENT_SOFT);
         }
 
-        vita2d_pgf_draw_text(font, 235, y + 36, isSelected ? COL_TEXT : COL_TEXT_DIM, 1.2f, names[i]);
-        vita2d_pgf_draw_text(font, 235, y + 64, COL_TEXT_FAINT, 0.85f, descs[i]);
+        int titleColor = isSelected ? COL_TEXT : COL_TEXT_DIM;
+        vita2d_pgf_draw_text(font, 155, y + 26, titleColor, 1.05f, names[i]);
+        vita2d_pgf_draw_text(font, 155, y + 46, COL_TEXT_FAINT, 0.78f, descs[i]);
+
+        int tagColor = isSelected ? COL_ACCENT : COL_TEXT_FAINT;
+        vita2d_pgf_draw_text(font, 740, y + 33, tagColor, 0.78f, tags[i]);
     }
 
     drawFooterBar();
     drawButtonHint(font, 180, 526, "↕", "Navigate");
     drawButtonHint(font, 400, 526, "X", "Confirm");
-    drawButtonHint(font, 620, 526, "O", "Back");
+    drawButtonHint(font, 620, 526, "O", "Dashboard");
 }
 
 void drawOptionsMenu(vita2d_pgf *font, MenuOptions *menu) {
@@ -896,6 +925,313 @@ void startAppScan(AppListState *appState) {
     requestBgTask(BG_TASK_SCAN_APPS);
 }
 
+void drawToolsMenu(vita2d_pgf *font, int selected) {
+    drawBackground();
+    drawHeader(font, "Tools", "Advanced maintenance tools");
+
+    const char* names[] = {"Storage Analyzer", "Smart Clean", "Orphan Scanner"};
+    const char* descs[] = {
+        "Inspect storage usage by category and identify largest directories",
+        "Scan and clean temporary, cache and dump files safely",
+        "Find and remove leftover data from uninstalled applications"
+    };
+
+    int cardX = 140, cardW = 680, cardH = 92;
+
+    for (int i = 0; i < 3; i++) {
+        int y = 120 + i * 110;
+        int isSelected = (i == selected);
+
+        vita2d_draw_rectangle(cardX, y, cardW, cardH, isSelected ? COL_CARD_SOLID : COL_CARD);
+        drawCardBorder(cardX, y, cardW, cardH, isSelected ? COL_ACCENT : COL_BORDER);
+
+        if (isSelected) {
+            vita2d_draw_rectangle(cardX + 1, y + 1, 5, cardH - 2, COL_ACCENT);
+            vita2d_draw_rectangle(cardX + 1, y + 1, cardW - 2, cardH - 2, COL_ACCENT_SOFT);
+        }
+
+        vita2d_pgf_draw_text(font, cardX + 25, y + 36, isSelected ? COL_TEXT : COL_TEXT_DIM, 1.15f, names[i]);
+        vita2d_pgf_draw_text(font, cardX + 25, y + 66, COL_TEXT_FAINT, 0.78f, descs[i]);
+    }
+
+    drawFooterBar();
+    drawButtonHint(font, 100, 526, "↕", "Navigate");
+    drawButtonHint(font, 300, 526, "X", "Select");
+    drawButtonHint(font, 800, 526, "O", "Back");
+}
+
+void drawAnalyzerScreen(vita2d_pgf *font, int scanning) {
+    drawBackground();
+    drawHeader(font, "Storage Analyzer", "Memory card usage analysis");
+    
+    if (scanning) {
+        drawSpinner(font, 480, 260, "Analyzing storage...");
+        drawFooterBar();
+        return;
+    }
+    
+    if (g_analyzerVolumeCount == 0 || g_analyzerActiveVolume < 0) {
+        drawCenteredText(font, 480, 278, COL_WARNING, 1.1f, "No volumes found!");
+        drawFooterBar();
+        drawButtonHint(font, 420, 526, "O", "Back");
+        return;
+    }
+    
+    AnalyzerVolumeState *vol = (AnalyzerVolumeState*)&g_analyzerVolumes[g_analyzerActiveVolume];
+    
+    drawCard(50, 95, 860, 92);
+    
+    char volText[64];
+    snprintf(volText, sizeof(volText), "<  %s  >", vol->volume);
+    drawCenteredText(font, 480, 122, COL_ACCENT, 1.15f, volText);
+    
+    char tStr[32], uStr[32], fStr[32];
+    formatSize(vol->totalSize, tStr, sizeof(tStr));
+    formatSize(vol->usedSize, uStr, sizeof(uStr));
+    formatSize(vol->freeSize, fStr, sizeof(fStr));
+    
+    char spaceText[128];
+    snprintf(spaceText, sizeof(spaceText), "Total: %s   Used: %s   Free: %s", tStr, uStr, fStr);
+    drawCenteredText(font, 480, 148, COL_TEXT_DIM, 0.85f, spaceText);
+    
+    int barW = 800, barH = 12, barX = 80, barY = 160;
+    vita2d_draw_rectangle(barX, barY, barW, barH, COL_CARD_DARK);
+    drawCardBorder(barX, barY, barW, barH, COL_BORDER);
+    if (vol->totalSize > 0) {
+        int fillW = (int)((vol->usedSize * barW) / vol->totalSize);
+        if (fillW > barW) fillW = barW;
+        if (fillW > 0) {
+            vita2d_draw_rectangle(barX + 1, barY + 1, fillW - 2, barH - 2, COL_ACCENT);
+        }
+    }
+    
+    drawCard(50, 195, 415, 285);
+    vita2d_pgf_draw_text(font, 75, 224, COL_TEXT_DIM, 0.95f, "CATEGORIES");
+    vita2d_draw_rectangle(70, 236, 375, 1, COL_BORDER);
+    
+    for (int i = 0; i < vol->categoryCount && i < 7; i++) {
+        char catStr[32];
+        formatSize(vol->categories[i].size, catStr, sizeof(catStr));
+        int y = 264 + i * 28;
+        vita2d_pgf_draw_text(font, 75, y, COL_TEXT, 0.82f, vol->categories[i].name);
+        vita2d_pgf_draw_text(font, 340, y, COL_ACCENT, 0.82f, catStr);
+    }
+    
+    drawCard(495, 195, 415, 285);
+    vita2d_pgf_draw_text(font, 520, 224, COL_TEXT_DIM, 0.95f, "TOP DIRECTORIES");
+    vita2d_draw_rectangle(515, 236, 375, 1, COL_BORDER);
+    
+    for (int i = 0; i < vol->topDirCount && i < 7; i++) {
+        char dirStr[32];
+        formatSize(vol->topDirs[i].size, dirStr, sizeof(dirStr));
+        int y = 264 + i * 28;
+        
+        char shortPath[24];
+        if (strlen(vol->topDirs[i].name) > 18) {
+            strncpy(shortPath, vol->topDirs[i].name, 15);
+            strcpy(shortPath + 15, "...");
+        } else {
+            strcpy(shortPath, vol->topDirs[i].name);
+        }
+        
+        vita2d_pgf_draw_text(font, 520, y, COL_TEXT, 0.80f, shortPath);
+        vita2d_pgf_draw_text(font, 780, y, COL_ACCENT, 0.80f, dirStr);
+    }
+
+    drawFooterBar();
+    drawButtonHint(font, 60, 526, "L/R", "Switch Vol");
+    drawButtonHint(font, 300, 526, "X", "Rescan");
+    drawButtonHint(font, 800, 526, "O", "Back");
+}
+
+void drawSmartPreview(vita2d_pgf *font) {
+    drawBackground();
+    drawHeader(font, "Smart Clean", "Review recommended cleanup");
+    
+    drawCard(60, 100, 840, 380);
+    
+    char s1[32], s2[32], s3[32], s4[32];
+    formatSize(g_smartCleanPlan.bytes[GRP_TEMPORARY], s1, sizeof(s1));
+    formatSize(g_smartCleanPlan.bytes[GRP_CACHE], s2, sizeof(s2));
+    formatSize(g_smartCleanPlan.bytes[GRP_CRASH], s3, sizeof(s3));
+    formatSize(g_smartCleanPlan.bytes[GRP_ORPHANED], s4, sizeof(s4));
+    
+    vita2d_pgf_draw_text(font, 100, 140, COL_TEXT, 0.95f, "Temporary Files:");
+    char t1[64]; snprintf(t1, sizeof(t1), "%llu files  (%s)", g_smartCleanPlan.files[GRP_TEMPORARY], s1);
+    vita2d_pgf_draw_text(font, 350, 140, COL_ACCENT, 0.95f, t1);
+    
+    vita2d_pgf_draw_text(font, 100, 175, COL_TEXT, 0.95f, "Cache Files:");
+    char t2[64]; snprintf(t2, sizeof(t2), "%llu files  (%s)", g_smartCleanPlan.files[GRP_CACHE], s2);
+    vita2d_pgf_draw_text(font, 350, 175, COL_ACCENT, 0.95f, t2);
+    
+    vita2d_pgf_draw_text(font, 100, 210, COL_TEXT, 0.95f, "Crash Dumps:");
+    char t3[64]; snprintf(t3, sizeof(t3), "%llu files  (%s)", g_smartCleanPlan.files[GRP_CRASH], s3);
+    vita2d_pgf_draw_text(font, 350, 210, COL_ACCENT, 0.95f, t3);
+    
+    vita2d_pgf_draw_text(font, 100, 245, COL_TEXT, 0.95f, "Orphaned Items:");
+    char t4[64]; snprintf(t4, sizeof(t4), "%llu items  (%s)", g_smartCleanPlan.files[GRP_ORPHANED], s4);
+    vita2d_pgf_draw_text(font, 350, 245, COL_ACCENT, 0.95f, t4);
+    
+    vita2d_draw_rectangle(90, 270, 780, 1, COL_BORDER);
+    
+    char totS[32];
+    formatSize(safetyPlanPotentialBytes(&g_smartCleanPlan), totS, sizeof(totS));
+    char totText[128];
+    snprintf(totText, sizeof(totText), "%llu files  |  %s", safetyPlanPotentialFiles(&g_smartCleanPlan), totS);
+    vita2d_pgf_draw_text(font, 100, 310, COL_SUCCESS, 1.15f, "Potential Cleanup:");
+    vita2d_pgf_draw_text(font, 350, 310, COL_SUCCESS, 1.15f, totText);
+    
+    char reviewText[128];
+    snprintf(reviewText, sizeof(reviewText), "Requires review: %llu items (not pre-selected)", g_smartCleanPlan.files[GRP_REVIEW]);
+    vita2d_pgf_draw_text(font, 100, 355, COL_WARNING, 0.80f, reviewText);
+    
+    char protText[128];
+    snprintf(protText, sizeof(protText), "Protected items: %llu (system data, cannot be deleted)", g_smartCleanPlan.files[GRP_PROTECTED]);
+    vita2d_pgf_draw_text(font, 100, 385, COL_TEXT_FAINT, 0.80f, protText);
+    
+    vita2d_pgf_draw_text(font, 100, 415, COL_TEXT_DIM, 0.78f, "Safe and regenerable cache files will be cleaned safely.");
+    
+    drawFooterBar();
+    drawButtonHint(font, 300, 526, "X", "Clean");
+    drawButtonHint(font, 800, 526, "O", "Cancel");
+}
+
+void drawSmartReport(vita2d_pgf *font) {
+    drawBackground();
+    drawCheckIcon(480, 125);
+    drawCenteredText(font, 480, 205, COL_SUCCESS, 1.6f, "CLEANUP COMPLETED");
+    
+    drawCard(120, 235, 720, 230);
+    
+    char str[128];
+    snprintf(str, sizeof(str), "Files Scanned: %llu", g_cleanReport.filesScanned);
+    vita2d_pgf_draw_text(font, 160, 280, COL_TEXT, 0.92f, str);
+    
+    snprintf(str, sizeof(str), "Files Deleted: %llu", g_cleanReport.filesDeleted);
+    vita2d_pgf_draw_text(font, 160, 320, COL_SUCCESS, 0.92f, str);
+    
+    snprintf(str, sizeof(str), "Skipped / Protected: %llu", g_cleanReport.filesSkipped);
+    vita2d_pgf_draw_text(font, 490, 280, COL_TEXT_DIM, 0.92f, str);
+    
+    snprintf(str, sizeof(str), "Failed: %llu", g_cleanReport.filesFailed);
+    vita2d_pgf_draw_text(font, 490, 320, g_cleanReport.filesFailed > 0 ? COL_WARNING : COL_TEXT_DIM, 0.92f, str);
+    
+    vita2d_draw_rectangle(150, 355, 660, 1, COL_BORDER);
+    
+    char s[32];
+    formatSize(g_cleanReport.bytesRecovered, s, sizeof(s));
+    snprintf(str, sizeof(str), "Space Recovered: %s", s);
+    vita2d_pgf_draw_text(font, 160, 400, COL_ACCENT, 1.15f, str);
+    
+    snprintf(str, sizeof(str), "Elapsed Time: %u s", g_cleanReport.elapsedSeconds);
+    vita2d_pgf_draw_text(font, 490, 400, COL_TEXT_DIM, 0.95f, str);
+    
+    drawFooterBar();
+    drawButtonHint(font, 400, 526, "X", "OK");
+    drawButtonHint(font, 800, 526, "O", "Back");
+}
+
+void drawOrphanScanScreen(vita2d_pgf *font, int phase, int scrollOffset, int selectedItem) {
+    drawBackground();
+    drawHeader(font, "Orphan Scanner", "Find leftovers from deleted apps");
+    
+    if (phase == 0) {
+        drawSpinner(font, 480, 260, "Scanning for orphans...");
+        drawFooterBar();
+        return;
+    }
+    
+    if (g_orphanItemCount == 0) {
+        drawCenteredText(font, 480, 278, COL_SUCCESS, 1.1f, "No orphans found! System is clean.");
+        drawFooterBar();
+        drawButtonHint(font, 420, 526, "O", "Back");
+        return;
+    }
+    
+    if (g_orphanTruncated) {
+        vita2d_pgf_draw_text(font, 40, 115, COL_WARNING, 0.9f, "Warning: Too many items. Results truncated.");
+    }
+    
+    int maxVisible = 14;
+    int startIdx = scrollOffset;
+    int endIdx = startIdx + maxVisible;
+    if (endIdx > g_orphanItemCount) endIdx = g_orphanItemCount;
+    
+    for (int i = startIdx; i < endIdx; i++) {
+        int rowIdx = i - startIdx;
+        int y = 142 + rowIdx * 24;
+        
+        SafetyItem *item = (SafetyItem*)&g_orphanItems[i];
+        
+        if (i == selectedItem) {
+            vita2d_draw_rectangle(40, y, 880, 24, COL_SELECTED);
+            vita2d_draw_rectangle(40, y, 3, 24, COL_ACCENT);
+        } else if (rowIdx % 2 == 1) {
+            vita2d_draw_rectangle(40, y, 880, 24, COL_ROW_ALT);
+        }
+        
+        if (item->category != CAT_PROTECTED) {
+            int cx = 60, cy = y + 12;
+            if (item->user_selected) {
+                vita2d_draw_rectangle(cx - 8, cy - 8, 16, 16, COL_SUCCESS);
+                vita2d_pgf_draw_text(font, cx - 5, cy + 6, RGBA(6, 30, 20, 255), 0.9f, "✓");
+            } else {
+                vita2d_draw_rectangle(cx - 8, cy - 8, 16, 16, COL_CARD_DARK);
+                drawCardBorder(cx - 8, cy - 8, 16, 16, COL_BORDER);
+            }
+        }
+        
+        int color = (item->category == CAT_PROTECTED) ? COL_DANGER : COL_TEXT;
+        
+        char path[64];
+        if (strlen(item->path) > 42) {
+            strncpy(path, item->path, 39);
+            strcpy(path + 39, "...");
+        } else {
+            strcpy(path, item->path);
+        }
+        
+        vita2d_pgf_draw_text(font, 80, y + 18, color, 0.85f, item->titleId[0] ? item->titleId : "-");
+        vita2d_pgf_draw_text(font, 180, y + 18, color, 0.80f, path);
+        
+        char s[32];
+        formatSize(item->size, s, sizeof(s));
+        vita2d_pgf_draw_text(font, 660, y + 18, COL_ACCENT, 0.85f, s);
+        
+        vita2d_pgf_draw_text(font, 780, y + 18, COL_TEXT_DIM, 0.80f, safetyCategoryName(item->category));
+    }
+    
+    drawScrollbar(930, 142, 336, maxVisible, g_orphanItemCount, scrollOffset);
+    
+    drawFooterBar();
+    drawButtonHint(font, 40, 526, "X", "Toggle");
+    drawButtonHint(font, 200, 526, "□", "Sel All");
+    drawButtonHint(font, 400, 526, "△", "Delete Sel");
+    drawButtonHint(font, 800, 526, "O", "Back");
+}
+
+void drawOrphanDeleteConfirmation(vita2d_pgf *font) {
+    vita2d_draw_rectangle(0, 0, 960, 544, RGBA(0, 0, 0, 170));
+    drawCard(220, 180, 520, 190);
+    vita2d_draw_rectangle(221, 181, 518, 3, COL_WARNING);
+    
+    drawCenteredText(font, 480, 220, COL_TEXT, 1.3f, "Delete Orphans");
+    drawCenteredText(font, 480, 255, COL_WARNING, 0.95f, "Delete selected orphaned items?");
+    
+    vita2d_draw_rectangle(250, 272, 460, 1, COL_BORDER);
+    
+    int selCount = 0;
+    for(int i=0; i<g_orphanItemCount; i++) {
+        if(g_orphanItems[i].user_selected) selCount++;
+    }
+    
+    char txt[64];
+    snprintf(txt, sizeof(txt), "Total items to delete: %d", selCount);
+    drawCenteredText(font, 480, 305, COL_TEXT_DIM, 0.95f, txt);
+    
+    drawButtonHint(font, 300, 345, "X", "Delete");
+    drawButtonHint(font, 520, 345, "O", "Cancel");
+}
 void startSizeCalc() {
     if (isBgBusy()) return;
     requestBgTask(BG_TASK_CALC_SIZE);
@@ -956,6 +1292,18 @@ int main() {
     CleaningProfile selectedProfile = PROFILE_COMPLETE;
     int running = 1;
     int currentFrame = 0;
+    int showToolsMenu = 0;
+    int toolsMenuSelected = 0;
+    int showAnalyzer = 0;
+    int analyzerScanning = 0;
+    int showSmartClean = 0;
+    int smartCleanPhase = 0; // 0=scan, 1=preview, 2=cleaning, 3=report
+    int showOrphanScan = 0;
+    int orphanScanPhase = 0; // 0=scanning, 1=results
+    int orphanScrollOffset = 0;
+    int orphanSelectedItem = 0;
+    int showOrphanDeleteConfirm = 0;
+    int orphanDeleting = 0;
 
     startSizeCalc();
 
@@ -989,6 +1337,31 @@ int main() {
 
             spaceKnown = 0;
             strcpy(spaceValueText, "Scanning...");
+        }
+
+        if (showAnalyzer && analyzerScanning && g_bgTaskDone) {
+            analyzerScanning = 0;
+        }
+        
+        if (showSmartClean && g_bgTaskDone) {
+            if (smartCleanPhase == 0) {
+                smartCleanPhase = 1;
+            } else if (smartCleanPhase == 2) {
+                smartCleanPhase = 3;
+            }
+        }
+        
+        if (showOrphanScan && orphanScanPhase == 0 && g_bgTaskDone && !orphanDeleting) {
+            orphanScanPhase = 1;
+            orphanSelectedItem = 0;
+            orphanScrollOffset = 0;
+        }
+        
+        if (orphanDeleting && g_bgTaskDone) {
+            orphanDeleting = 0;
+            showOrphanScan = 0;
+            showSmartClean = 1;
+            smartCleanPhase = 3;
         }
 
         if (cleaningInProgress && g_bgTaskDone) {
@@ -1054,7 +1427,7 @@ int main() {
             }
         }
 
-        if (g_bgTaskDone && currentFrame % 300 == 0) {
+        if (g_bgTaskDone && !showSmartClean && !showAnalyzer && !showOrphanScan && currentFrame % 300 == 0) {
             requestBgTask(BG_TASK_CALC_SIZE);
         }
 
@@ -1077,6 +1450,29 @@ int main() {
             drawDeleteConfirmation(font, &preview);
         } else if (appState.showAppList) {
             drawAppListScreen(font, &appState, appScanning);
+        } else if (showOrphanDeleteConfirm) {
+            drawOrphanScanScreen(font, orphanScanPhase, orphanScrollOffset, orphanSelectedItem);
+            drawOrphanDeleteConfirmation(font);
+        } else if (showOrphanScan) {
+            if (orphanDeleting) {
+                drawProgressBar(font, getScanProgress());
+            } else {
+                drawOrphanScanScreen(font, orphanScanPhase, orphanScrollOffset, orphanSelectedItem);
+            }
+        } else if (showSmartClean) {
+            if (smartCleanPhase == 0) {
+                drawBackground(); drawHeader(font, "Smart Clean", ""); drawSpinner(font, 480, 260, "Smart Scan in progress..."); drawFooterBar();
+            } else if (smartCleanPhase == 1) {
+                drawSmartPreview(font);
+            } else if (smartCleanPhase == 2) {
+                drawProgressBar(font, getScanProgress());
+            } else if (smartCleanPhase == 3) {
+                drawSmartReport(font);
+            }
+        } else if (showAnalyzer) {
+            drawAnalyzerScreen(font, analyzerScanning);
+        } else if (showToolsMenu) {
+            drawToolsMenu(font, toolsMenuSelected);
         } else if (showPreview) {
             drawPreviewScreen(font, &preview, previewScanning);
         } else if (showMenu) {
@@ -1092,33 +1488,199 @@ int main() {
 
         gpuMemoryCleanup();
 
-        if (cleaningInProgress || appCleaningInProgress) {
+        if (cleaningInProgress || appCleaningInProgress || (showSmartClean && smartCleanPhase == 2) || (showOrphanScan && orphanDeleting)) {
             if (pad.buttons & SCE_CTRL_CIRCLE) {
                 requestEmergencyStop();
+            }
+        } else if (showOrphanDeleteConfirm) {
+            if (pad.buttons & SCE_CTRL_CROSS) {
+                showOrphanDeleteConfirm = 0;
+                orphanDeleting = 1;
+                resetDeletedFilesCount();
+                resetScanProgress();
+                requestBgTask(BG_TASK_ORPHAN_DELETE);
+                sceKernelDelayThread(200 * 1000);
+            } else if (pad.buttons & SCE_CTRL_CIRCLE) {
+                showOrphanDeleteConfirm = 0;
+                sceKernelDelayThread(200 * 1000);
+            }
+        } else if (showOrphanScan) {
+            if (orphanScanPhase == 1) {
+                if (pad.buttons & SCE_CTRL_UP) {
+                    if (orphanSelectedItem > 0) orphanSelectedItem--;
+                    if (orphanSelectedItem < orphanScrollOffset) orphanScrollOffset = orphanSelectedItem;
+                    sceKernelDelayThread(150 * 1000);
+                }
+                if (pad.buttons & SCE_CTRL_DOWN) {
+                    if (orphanSelectedItem < g_orphanItemCount - 1) orphanSelectedItem++;
+                    if (orphanSelectedItem >= orphanScrollOffset + 14) orphanScrollOffset = orphanSelectedItem - 13;
+                    sceKernelDelayThread(150 * 1000);
+                }
+                if (pad.buttons & SCE_CTRL_CROSS) {
+                    if (g_orphanItemCount > 0) {
+                        SafetyItem *item = (SafetyItem*)&g_orphanItems[orphanSelectedItem];
+                        if (item->category != CAT_PROTECTED) {
+                            item->user_selected = !item->user_selected;
+                            safetyRecompute(item);
+                        }
+                    }
+                    sceKernelDelayThread(200 * 1000);
+                }
+                if (pad.buttons & SCE_CTRL_SQUARE) {
+                    for (int i = 0; i < g_orphanItemCount; i++) {
+                        SafetyItem *item = (SafetyItem*)&g_orphanItems[i];
+                        if (item->category != CAT_PROTECTED) {
+                            item->user_selected = 1;
+                            safetyRecompute(item);
+                        }
+                    }
+                    sceKernelDelayThread(200 * 1000);
+                }
+                if (pad.buttons & SCE_CTRL_TRIANGLE) {
+                    int anySel = 0;
+                    for (int i = 0; i < g_orphanItemCount; i++) {
+                        if (g_orphanItems[i].user_selected) anySel = 1;
+                    }
+                    if (anySel) showOrphanDeleteConfirm = 1;
+                    sceKernelDelayThread(200 * 1000);
+                }
+            }
+            if (pad.buttons & SCE_CTRL_CIRCLE) {
+                showOrphanScan = 0;
+                showToolsMenu = 0;
+                sceKernelDelayThread(200 * 1000);
+            }
+        } else if (showSmartClean) {
+            if (smartCleanPhase == 1) {
+                if (pad.buttons & SCE_CTRL_CROSS) {
+                    smartCleanPhase = 2;
+                    resetDeletedFilesCount();
+                    resetScanProgress();
+                    requestBgTask(BG_TASK_SMART_CLEAN);
+                    sceKernelDelayThread(200 * 1000);
+                } else if (pad.buttons & SCE_CTRL_CIRCLE) {
+                    showSmartClean = 0;
+                    showToolsMenu = 0;
+                    sceKernelDelayThread(200 * 1000);
+                }
+            } else if (smartCleanPhase == 3) {
+                if ((pad.buttons & SCE_CTRL_CROSS) || (pad.buttons & SCE_CTRL_CIRCLE)) {
+                    showSmartClean = 0;
+                    showToolsMenu = 0;
+                    spaceKnown = 0;
+                    strcpy(spaceValueText, "Scanning...");
+                    startSizeCalc();
+                    sceKernelDelayThread(200 * 1000);
+                }
+            }
+        } else if (showAnalyzer) {
+            if (!analyzerScanning) {
+                if (pad.buttons & SCE_CTRL_LTRIGGER) {
+                    if (g_analyzerVolumeCount > 0) {
+                        g_analyzerActiveVolume = (g_analyzerActiveVolume - 1 + g_analyzerVolumeCount) % g_analyzerVolumeCount;
+                    }
+                    sceKernelDelayThread(200 * 1000);
+                }
+                if (pad.buttons & SCE_CTRL_RTRIGGER) {
+                    if (g_analyzerVolumeCount > 0) {
+                        g_analyzerActiveVolume = (g_analyzerActiveVolume + 1) % g_analyzerVolumeCount;
+                    }
+                    sceKernelDelayThread(200 * 1000);
+                }
+                if (pad.buttons & SCE_CTRL_CROSS) {
+                    if (g_analyzerVolumeCount > 0) {
+                        analyzerScanning = 1;
+                        requestBgTask(BG_TASK_ANALYZE_VOLUME);
+                    }
+                    sceKernelDelayThread(200 * 1000);
+                }
+            }
+            if (pad.buttons & SCE_CTRL_CIRCLE) {
+                showAnalyzer = 0;
+                showToolsMenu = 0;
+                sceKernelDelayThread(200 * 1000);
+            }
+        } else if (showToolsMenu) {
+            if (pad.buttons & SCE_CTRL_UP) {
+                toolsMenuSelected--;
+                if (toolsMenuSelected < 0) toolsMenuSelected = 2;
+                sceKernelDelayThread(150 * 1000);
+            }
+            if (pad.buttons & SCE_CTRL_DOWN) {
+                toolsMenuSelected++;
+                if (toolsMenuSelected > 2) toolsMenuSelected = 0;
+                sceKernelDelayThread(150 * 1000);
+            }
+            if (pad.buttons & SCE_CTRL_CROSS) {
+                showToolsMenu = 0;
+                if (toolsMenuSelected == 0) {
+                    showAnalyzer = 1;
+                    if (g_analyzerVolumeCount > 0 && g_analyzerActiveVolume >= 0) {
+                        analyzerScanning = 0;
+                    } else {
+                        g_analyzerActiveVolume = 0;
+                        analyzerScanning = 1;
+                        requestBgTask(BG_TASK_ANALYZE_VOLUME);
+                    }
+                } else if (toolsMenuSelected == 1) {
+                    showSmartClean = 1;
+                    smartCleanPhase = 0;
+                    requestBgTask(BG_TASK_SMART_SCAN);
+                } else if (toolsMenuSelected == 2) {
+                    showOrphanScan = 1;
+                    orphanScanPhase = 0;
+                    orphanSelectedItem = 0;
+                    orphanScrollOffset = 0;
+                    requestBgTask(BG_TASK_ORPHAN_SCAN);
+                }
+                sceKernelDelayThread(200 * 1000);
+            }
+            if (pad.buttons & SCE_CTRL_CIRCLE) {
+                showToolsMenu = 0;
+                sceKernelDelayThread(200 * 1000);
             }
         } else if (showProfileSelect) {
             if (pad.buttons & SCE_CTRL_UP) {
                 int p = (int)selectedProfile - 1;
-                if (p < 0) p = 2;
+                if (p < 0) p = 5;
                 selectedProfile = (CleaningProfile)p;
-                sceKernelDelayThread(200 * 1000);
+                sceKernelDelayThread(180 * 1000);
             }
             if (pad.buttons & SCE_CTRL_DOWN) {
                 int p = (int)selectedProfile + 1;
-                if (p > 2) p = 0;
+                if (p > 5) p = 0;
                 selectedProfile = (CleaningProfile)p;
-                sceKernelDelayThread(200 * 1000);
+                sceKernelDelayThread(180 * 1000);
             }
             if (pad.buttons & SCE_CTRL_CROSS) {
                 showProfileSelect = 0;
-                initMenuOptions(&menu, selectedProfile);
-
-                if (selectedProfile == PROFILE_SELECTIVE) {
-                    showMenu = 1;
-                } else {
+                if (selectedProfile == PROFILE_QUICK || selectedProfile == PROFILE_COMPLETE) {
+                    initMenuOptions(&menu, selectedProfile);
                     showPreview = 1;
                     startPreviewScan(&preview);
                     previewScanning = 1;
+                } else if (selectedProfile == PROFILE_SELECTIVE) {
+                    initMenuOptions(&menu, selectedProfile);
+                    showMenu = 1;
+                } else if (selectedProfile == PROFILE_SMART) {
+                    showSmartClean = 1;
+                    smartCleanPhase = 0;
+                    requestBgTask(BG_TASK_SMART_SCAN);
+                } else if (selectedProfile == PROFILE_ORPHAN) {
+                    showOrphanScan = 1;
+                    orphanScanPhase = 0;
+                    orphanSelectedItem = 0;
+                    orphanScrollOffset = 0;
+                    requestBgTask(BG_TASK_ORPHAN_SCAN);
+                } else if (selectedProfile == PROFILE_ANALYZER) {
+                    showAnalyzer = 1;
+                    if (g_analyzerVolumeCount > 0 && g_analyzerActiveVolume >= 0) {
+                        analyzerScanning = 0;
+                    } else {
+                        g_analyzerActiveVolume = 0;
+                        analyzerScanning = 1;
+                        requestBgTask(BG_TASK_ANALYZE_VOLUME);
+                    }
                 }
                 sceKernelDelayThread(200 * 1000);
             }
@@ -1357,6 +1919,11 @@ int main() {
                 appScanning = 1;
                 sceKernelDelayThread(200 * 1000);
             }
+            if (pad.buttons & SCE_CTRL_LTRIGGER) {
+                showToolsMenu = 1;
+                toolsMenuSelected = 0;
+                sceKernelDelayThread(200 * 1000);
+            }
             if (pad.buttons & SCE_CTRL_CROSS) {
                 showPreview = 1;
                 startPreviewScan(&preview);
@@ -1385,3 +1952,4 @@ int main() {
 
     return 0;
 }
+

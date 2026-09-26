@@ -431,11 +431,20 @@ void initEmergencyStop() {
 void startOperation() {
     g_operationInProgress = 1;
     g_emergencyStop = 0;
+    g_lastProgressPercent = 0;
+    resetDeletedFilesCount();
+    resetScanProgress();
+    safetySetUserConfirmed(1);
+}
+
+void incrementDeletedFilesCount() {
+    g_deletedFilesCount++;
 }
 
 void endOperation() {
     g_operationInProgress = 0;
     g_emergencyStop = 0;
+    safetySetUserConfirmed(0);
 }
 
 void requestEmergencyStop() {
@@ -480,6 +489,7 @@ void updateScanProgress(int currentItem) {
     } else {
         g_scanProgress = 0;
     }
+    reportProgress(g_scanProgress);
 }
 
 int getScanProgress() {
@@ -716,15 +726,36 @@ static int collectDirEntries(const char *path, DirEntries *entries) {
     return 1;
 }
 
+static void deleteRecursiveInternal(const char *path, int orphanApproved, const char *titleId);
+
 void deleteRecursive(const char *path) {
+    deleteRecursiveInternal(path, 0, NULL);
+}
+
+static int canDeletePath(const char *path, int orphanApproved, const char *titleId, unsigned long long size) {
+    SafetyItem item;
+    char reason[SAFETY_MAX_REASON];
+
+    safetyItemInitWithTitle(&item, path, size,
+                            orphanApproved ? SAFETY_ORPHAN_CERTAIN : SAFETY_ORPHAN_NONE,
+                            titleId);
+    item.user_selected = 1;
+    safetyRecompute(&item);
+
+    return safetyVerifyDelete(&item, reason, sizeof(reason));
+}
+
+static void deleteRecursiveInternal(const char *path, int orphanApproved, const char *titleId) {
     if (isEmergencyStopRequested()) return;
 
     DirEntries entries;
     memset(&entries, 0, sizeof(entries));
 
     if (!collectDirEntries(path, &entries)) {
-        if (sceIoRemove(path) >= 0) {
-            g_deletedFilesCount++;
+        if (canDeletePath(path, orphanApproved, titleId, 0)) {
+            if (sceIoRemove(path) >= 0) {
+                g_deletedFilesCount++;
+            }
         }
         return;
     }
@@ -745,11 +776,13 @@ void deleteRecursive(const char *path) {
         SceIoStat st;
         if (sceIoGetstat(newPath, &st) >= 0) {
             if (SCE_S_ISDIR(st.st_mode)) {
-                deleteRecursive(newPath);
+                deleteRecursiveInternal(newPath, orphanApproved, titleId);
                 sceIoRmdir(newPath);
             } else {
-                if (sceIoRemove(newPath) >= 0) {
-                    g_deletedFilesCount++;
+                if (canDeletePath(newPath, orphanApproved, titleId, (unsigned long long)st.st_size)) {
+                    if (sceIoRemove(newPath) >= 0) {
+                        g_deletedFilesCount++;
+                    }
                 }
             }
         }
@@ -758,7 +791,7 @@ void deleteRecursive(const char *path) {
         free(entries.names[i]);
 
         if ((i & 63) == 63) {
-            sceKernelDelayThread(1000 * 1000);
+            sceKernelDelayThread(1000);
         }
     }
 
@@ -1204,6 +1237,24 @@ int isAppInstalled(const char *title_id) {
     return sceIoGetstat(path, &stat) >= 0;
 }
 
+int isTitleIdInstalled(const char *titleId) {
+    char path[MAX_PATH_LENGTH];
+    SceIoStat stat;
+
+    if (!safetyIsValidTitleId(titleId)) return 0;
+
+    safe_snprintf(path, sizeof(path), "ux0:app/%s", titleId);
+    if (sceIoGetstat(path, &stat) >= 0) return 1;
+    safe_snprintf(path, sizeof(path), "ux0:appmeta/%s", titleId);
+    if (sceIoGetstat(path, &stat) >= 0) return 1;
+    safe_snprintf(path, sizeof(path), "ur0:app/%s", titleId);
+    if (sceIoGetstat(path, &stat) >= 0) return 1;
+    safe_snprintf(path, sizeof(path), "ur0:appmeta/%s", titleId);
+    if (sceIoGetstat(path, &stat) >= 0) return 1;
+
+    return 0;
+}
+
 int isOlderThanDays(const SceDateTime *mtime, int days) {
     SceDateTime now;
     getCurrentTime(&now);
@@ -1476,7 +1527,7 @@ void findOrphanedPatchDirectories() {
     sceIoDclose(dfd);
 }
 
-static int isSystemDataDirName(const char *dirName) {
+int isSystemDataDirName(const char *dirName) {
     return strcmp(dirName, "Adrenaline") == 0 ||
         strcmp(dirName, "AutoPlugin") == 0 ||
         strcmp(dirName, "AUTOPLUGIN2") == 0 ||
@@ -2665,6 +2716,30 @@ static int bgWorkerThread(SceSize argc, void *argp) {
             g_bgSpaceFreed = cleanSingleAppTempFiles(g_bgCleanAppTitleId);
             g_bgTask = BG_TASK_IDLE;
             g_bgTaskDone = 1;
+        } else if (g_bgTask == BG_TASK_ANALYZE_VOLUME) {
+            analyzerScanVolume(g_analyzerActiveVolume);
+            g_bgTask = BG_TASK_IDLE;
+            g_bgTaskDone = 1;
+        } else if (g_bgTask == BG_TASK_SMART_SCAN) {
+            smartCleanScan();
+            g_bgTask = BG_TASK_IDLE;
+            g_bgTaskDone = 1;
+        } else if (g_bgTask == BG_TASK_SMART_CLEAN) {
+            startOperation();
+            smartCleanRun();
+            endOperation();
+            g_bgTask = BG_TASK_IDLE;
+            g_bgTaskDone = 1;
+        } else if (g_bgTask == BG_TASK_ORPHAN_SCAN) {
+            orphanScanRun();
+            g_bgTask = BG_TASK_IDLE;
+            g_bgTaskDone = 1;
+        } else if (g_bgTask == BG_TASK_ORPHAN_DELETE) {
+            startOperation();
+            orphanDeleteSelected();
+            endOperation();
+            g_bgTask = BG_TASK_IDLE;
+            g_bgTaskDone = 1;
         }
         sceKernelDelayThread(8 * 1000);
     }
@@ -2674,6 +2749,7 @@ static int bgWorkerThread(SceSize argc, void *argp) {
 
 void startBgWorker() {
     if (g_bgThreadId >= 0) return;
+    maintenanceInit();
     g_bgRunning = 1;
     g_bgThreadId = sceKernelCreateThread("psv_cleaner_bg", bgWorkerThread, 0x10000101, 0x40000, 0, 0, NULL);
     if (g_bgThreadId >= 0) {

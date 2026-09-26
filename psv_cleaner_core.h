@@ -7,6 +7,8 @@
 #include <string.h>
 #include <stdarg.h>
 #include <psp2/apputil.h>
+#include <psp2/rtc.h>
+#include "psv_cleaner_safety.h"
 
 #define RGBA(r,g,b,a) ((a) << 24 | (r) << 16 | (g) << 8 | (b))
 
@@ -181,6 +183,7 @@ void invalidateSpaceCache();
 void updateSpaceCacheIfNeeded(int currentFrame);
 int getDeletedFilesCount();
 void resetDeletedFilesCount();
+void incrementDeletedFilesCount();
 void deleteRecursive(const char *path);
 void forceDeleteDumpFiles();
 void aggressiveDumpCleanup();
@@ -188,6 +191,9 @@ void clearScanCache();
 
 void getInstalledAppsList(char ***apps, int *count);
 int isAppInstalled(const char *title_id);
+int isTitleIdInstalled(const char *titleId);
+int isSystemDataDirName(const char *dirName);
+int isOlderThanDays(const SceDateTime *mtime, int days);
 void findOrphanedDataDirectories();
 void findOrphanedLicenseDirectories();
 void findOrphanedPatchDirectories();
@@ -246,7 +252,12 @@ typedef enum {
     BG_TASK_SCAN_PREVIEW = 2,
     BG_TASK_SCAN_APPS = 3,
     BG_TASK_CLEAN = 4,
-    BG_TASK_CLEAN_APP = 5
+    BG_TASK_CLEAN_APP = 5,
+    BG_TASK_ANALYZE_VOLUME = 6,
+    BG_TASK_SMART_SCAN = 7,
+    BG_TASK_SMART_CLEAN = 8,
+    BG_TASK_ORPHAN_SCAN = 9,
+    BG_TASK_ORPHAN_DELETE = 10
 } BgTask;
 
 extern volatile int g_bgTask;
@@ -268,7 +279,60 @@ void requestBgTask(BgTask task);
 int isBgBusy();
 void waitBgIdle();
 
-#endif
+#define ANALYZER_MAX_VOLUMES 4
+#define ANALYZER_MAX_CATEGORIES 9
+#define ANALYZER_TOP_DIRS 16
+#define ORPHAN_MAX_ITEMS 192
+
+typedef struct {
+    char name[16];
+    unsigned long long size;
+} AnalyzerCategory;
+
+typedef struct {
+    char name[48];
+    unsigned long long size;
+} AnalyzerTopDir;
+
+typedef struct {
+    char volume[8];
+    int available;
+    int partial;
+    unsigned long long totalSize;
+    unsigned long long freeSize;
+    unsigned long long usedSize;
+    int usedPercent;
+    int categoryCount;
+    AnalyzerCategory categories[ANALYZER_MAX_CATEGORIES];
+    int topDirCount;
+    AnalyzerTopDir topDirs[ANALYZER_TOP_DIRS];
+} AnalyzerVolumeState;
+
+extern AnalyzerVolumeState g_analyzerVolumes[ANALYZER_MAX_VOLUMES];
+extern volatile int g_analyzerVolumeCount;
+extern volatile int g_analyzerActiveVolume;
+
+void analyzerPrepare();
+void analyzerScanVolume(int index);
+
+extern SmartCleanPlan g_smartCleanPlan;
+extern CleanScanStats g_smartCleanStats;
+extern CleanReport g_cleanReport;
+
+void smartCleanReset();
+void smartCleanScan();
+void smartCleanRun();
+
+extern SafetyItem g_orphanItems[ORPHAN_MAX_ITEMS];
+extern volatile int g_orphanItemCount;
+extern volatile int g_orphanTruncated;
+extern volatile int g_orphanSkipped;
+extern volatile int g_orphanProtected;
+
+void orphanScanRun();
+void orphanDeleteSelected();
+
+void maintenanceInit();
 
 #define MAX_LANGUAGES 1
 #define LANGUAGE_EN 0
@@ -301,3 +365,5 @@ const char* L(const char* lang_array[][30], int lang_index, int text_index);
 void detectSystemLanguage();
 void setTheme(AppTheme theme);
 void applyThemeColors(ThemeColors* colors);
+
+#endif
