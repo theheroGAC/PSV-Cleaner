@@ -6,6 +6,7 @@
 static const char *const *g_curatedPaths = NULL;
 static size_t g_curatedPathCount = 0;
 static int g_userConfirmed = 0;
+static SafetyWhitelistFn g_whitelistFn = NULL;
 
 static const struct {
     const char *prefix;
@@ -27,6 +28,7 @@ static const struct {
     {"ux0:tai/", "kernel plugin configuration"},
     {"ux0:ac/", "system data"},
     {"ux0:bd/", "system data"},
+    {"ur0:app/", "system application data"},
     {"ur0:config/", "system configuration"},
     {"ur0:shell/", "shell data"},
     {"ur0:user/", "user data"},
@@ -34,9 +36,18 @@ static const struct {
     {"ur0:license/", "license data"},
     {"ur0:appmeta/", "system application metadata"},
     {"ur0:data/", "system data"},
-    {"vs0:app/", "system application data"},
-    {"vs0:data/", "system data"},
-    {"vs0:sys/", "system data"}
+    {"uma0:app/", "system application data"},
+    {"uma0:appmeta/", "system application metadata"},
+    {"uma0:user/", "user data"},
+    {"uma0:tai/", "kernel plugin configuration"},
+    {"imc0:app/", "system application data"},
+    {"imc0:appmeta/", "system application metadata"},
+    {"imc0:user/", "user data"},
+    {"imc0:tai/", "kernel plugin configuration"},
+    {"vs0:", "system partition"},
+    {"os0:", "system partition"},
+    {"sa0:", "system partition"},
+    {"vd0:", "system partition"}
 };
 
 static const char *SAFETY_PROTECTED_EXACT[] = {
@@ -54,10 +65,22 @@ static const char *SAFETY_PROTECTED_EXACT[] = {
     "ux0:temp",
     "ux0:cache",
     "ux0:log",
+    "ux0:tai",
+    "ux0:rePatch",
+    "ux0:reAddcont",
+    "ur0:app",
     "ur0:data",
     "ur0:user",
     "ur0:temp",
-    "uma0:data"
+    "ur0:tai",
+    "uma0:app",
+    "uma0:data",
+    "uma0:user",
+    "uma0:tai",
+    "imc0:app",
+    "imc0:data",
+    "imc0:user",
+    "imc0:tai"
 };
 
 static int safetyCharUpper(int c) {
@@ -79,6 +102,22 @@ static const char *safetyBaseName(const char *path) {
     if (slash) base = slash + 1;
     if (colon && colon + 1 > base) base = colon + 1;
     return base;
+}
+
+static void safetyNormalizePath(const char *src, char *dst, size_t size) {
+    if (!dst || size == 0) return;
+    dst[0] = '\0';
+    if (!src) return;
+    const char *colon = strchr(src, ':');
+    if (colon && colon[1] == '/') {
+        size_t prefixLen = (size_t)(colon - src) + 1;
+        if (prefixLen < size) {
+            memcpy(dst, src, prefixLen);
+            snprintf(dst + prefixLen, size - prefixLen, "%s", colon + 2);
+            return;
+        }
+    }
+    snprintf(dst, size, "%s", src);
 }
 
 static int safetySamePath(const char *a, const char *b) {
@@ -125,9 +164,40 @@ static const char *safetyProtectedReason(const char *path) {
     }
     return NULL;
 }
+
+int safetyMatchWildcard(const char *pattern, const char *text) {
+    if (!pattern || !text) return 0;
+    const char *p = pattern;
+    const char *t = text;
+    const char *star = NULL;
+    const char *starText = NULL;
+
+    while (*t) {
+        if (*p == '*') {
+            star = p++;
+            starText = t;
+        } else if (*p == '?' || safetyCharUpper((unsigned char)*p) == safetyCharUpper((unsigned char)*t)) {
+            p++;
+            t++;
+        } else if (star) {
+            p = star + 1;
+            t = ++starText;
+        } else {
+            return 0;
+        }
+    }
+
+    while (*p == '*') p++;
+    return *p == '\0';
+}
+
 void safetyInit(const char *const *tempPaths, size_t count) {
     g_curatedPaths = tempPaths;
     g_curatedPathCount = count;
+}
+
+void safetySetWhitelistCallback(SafetyWhitelistFn fn) {
+    g_whitelistFn = fn;
 }
 
 void safetySetUserConfirmed(int confirmed) {
@@ -195,16 +265,26 @@ int safetyPathIsProtected(const char *path) {
 int safetyPathIsCurated(const char *path) {
     if (!path) return 0;
 
+    char normPath[SAFETY_MAX_PATH];
+    safetyNormalizePath(path, normPath, sizeof(normPath));
+
     for (size_t i = 0; i < g_curatedPathCount; i++) {
         const char *entry = g_curatedPaths ? g_curatedPaths[i] : NULL;
         if (!entry || entry[0] == '\0') continue;
-        if (strchr(entry, '*') != NULL) continue;
 
-        size_t entryLen = strlen(entry);
-        if (strncmp(path, entry, entryLen) == 0) return 1;
+        char normEntry[SAFETY_MAX_PATH];
+        safetyNormalizePath(entry, normEntry, sizeof(normEntry));
 
-        if (entry[entryLen - 1] == '/') {
-            if (strlen(path) == entryLen - 1 && strncmp(path, entry, entryLen - 1) == 0) return 1;
+        if (strchr(normEntry, '*') != NULL) {
+            if (safetyMatchWildcard(normEntry, normPath)) return 1;
+            continue;
+        }
+
+        size_t entryLen = strlen(normEntry);
+        if (strncasecmp(normPath, normEntry, entryLen) == 0) return 1;
+
+        if (entryLen > 0 && normEntry[entryLen - 1] == '/') {
+            if (strlen(normPath) == entryLen - 1 && strncasecmp(normPath, normEntry, entryLen - 1) == 0) return 1;
         }
     }
 
@@ -270,6 +350,7 @@ static int safetyIsTempLike(const char *path) {
     if (safetyHasComponent(path, "shaderlog")) return 1;
     if (safetyHasComponent(path, "patch_temp")) return 1;
     if (safetyHasComponent(path, "update_temp")) return 1;
+    if (safetyHasComponent(path, "ptmp")) return 1;
 
     if (safetyHasExtension(path, "tmp")) return 1;
     if (safetyHasExtension(path, "temp")) return 1;
@@ -284,6 +365,9 @@ static int safetyIsTempLike(const char *path) {
 static int safetyIsInstallerPackage(const char *path) {
     if (safetyHasExtension(path, "vpk")) return 1;
     if (safetyHasExtension(path, "pkg")) return 1;
+    if (safetyHasExtension(path, "zip")) return 1;
+    if (safetyHasExtension(path, "7z")) return 1;
+    if (safetyHasExtension(path, "rar")) return 1;
     return 0;
 }
 
@@ -327,6 +411,11 @@ static void safetyClassify(SafetyItem *item, int orphanHint) {
 
     if (safetyIsVolumeRoot(path)) {
         safetySet(item, CAT_PROTECTED, GRP_PROTECTED, SAFETY_CERTAINTY_NONE, "volume root");
+        return;
+    }
+
+    if (g_whitelistFn && g_whitelistFn(path, item->titleId)) {
+        safetySet(item, CAT_PROTECTED, GRP_PROTECTED, SAFETY_CERTAINTY_NONE, "whitelisted by user");
         return;
     }
 
@@ -464,6 +553,11 @@ int safetyVerifyDelete(const SafetyItem *item, char *reasonOut, size_t reasonSiz
         return 0;
     }
 
+    if (g_whitelistFn && g_whitelistFn(item->path, item->titleId)) {
+        if (reasonOut) safetyCopy(reasonOut, reasonSize, "whitelisted item");
+        return 0;
+    }
+
     if (item->category == CAT_PROTECTED) {
         if (reasonOut) safetyCopy(reasonOut, reasonSize, "protected item");
         return 0;
@@ -578,4 +672,3 @@ void safetyStatsAdd(CleanScanStats *stats, const SafetyItem *item) {
             break;
     }
 }
-

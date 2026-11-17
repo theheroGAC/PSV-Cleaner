@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <psp2/apputil.h>
+#include <psp2/system_param.h>
 #include <psp2/rtc.h>
 #include "psv_cleaner_safety.h"
 
@@ -16,19 +17,19 @@
 #define MAX_FILENAME_LENGTH 256
 #define MAX_FILE_FILTER_LENGTH 32
 
-#define safe_strncpy(dest, src, size) do { \
-    if (size > 0) { \
-        dest[0] = '\0'; \
-        size_t len = strlen(src); \
-        if (len < size) { \
-            memcpy(dest, src, len); \
-            dest[len] = '\0'; \
-        } else if (size > 1) { \
-            memcpy(dest, src, size - 1); \
-            dest[size - 1] = '\0'; \
-        } \
-    } \
-} while(0)
+static inline void safe_strncpy(char *dest, const char *src, size_t size) {
+    if (!dest || size == 0) return;
+    if (!src) {
+        dest[0] = '\0';
+        return;
+    }
+    size_t i = 0;
+    while (i < size - 1 && src[i] != '\0') {
+        dest[i] = src[i];
+        i++;
+    }
+    dest[i] = '\0';
+}
 
 #define safe_strncat(dest, src, dest_size) do { \
     size_t dest_len = strlen(dest); \
@@ -90,6 +91,7 @@ extern const size_t TEMP_PATHS_COUNT;
 typedef struct {
     char path[MAX_PATH_LENGTH];
     unsigned long long size;
+    unsigned char selected;
 } FileInfo;
 
 typedef struct {
@@ -101,6 +103,7 @@ typedef struct {
 
 typedef struct {
     char titleId[10];
+    char appName[64];
     unsigned long long tempSize;
 } AppInfo;
 
@@ -171,6 +174,7 @@ extern int cleanOrphanedLicenseFiles;
 extern int cleanOrphanedDLC;
 extern int cleanOrphanedAddcont;
 extern int cleanEmptyLiveareaBubbles;
+extern int cleanRePatchOrphans;
 
 int loadCleanupCounter();
 void saveCleanupCounter(int count);
@@ -179,6 +183,8 @@ unsigned long long calculateTempSize();
 unsigned long long calculateTempSizeOptimized();
 unsigned long long calculateTempSizeRecursive(const char *path);
 unsigned long long cleanTemporaryFiles();
+unsigned long long cleanSelectedPreviewFiles(FileList *list);
+unsigned long long cleanFilteredPreviewFiles(FileList *list, const char *fileFilter, const char *searchQuery);
 void invalidateSpaceCache();
 void updateSpaceCacheIfNeeded(int currentFrame);
 int getDeletedFilesCount();
@@ -206,6 +212,7 @@ void scanAppTempFilesForPreview(FileList *list, const char *titleId);
 AppList* createAppList();
 void freeAppList(AppList *list);
 void populateAppListWithSizes(AppList *list);
+void sortAppList(AppList *list, SortMode sortMode);
 unsigned long long calculateSingleAppTempFilesSize(const char *titleId);
 unsigned long long cleanSingleAppTempFiles(const char *titleId);
 int shouldCleanPath(const char *path);
@@ -226,6 +233,8 @@ void freeFileList(FileList *list);
 void addFileToList(FileList *list, const char *path, unsigned long long size);
 void scanFilesForPreview(FileList *list);
 void sortFileList(FileList *list, SortMode sortMode);
+int matchesFileFilter(const char *filename, const char *filter);
+int matchesFileSearch(const char *path, const char *searchQuery);
 void filterAndSortFileList(FileList *list, SortMode sortMode, const char *fileFilter, unsigned long long *totalVisibleSize);
 int deleteSingleFileFromList(FileList *list, int index);
 
@@ -257,7 +266,14 @@ typedef enum {
     BG_TASK_SMART_SCAN = 7,
     BG_TASK_SMART_CLEAN = 8,
     BG_TASK_ORPHAN_SCAN = 9,
-    BG_TASK_ORPHAN_DELETE = 10
+    BG_TASK_ORPHAN_DELETE = 10,
+    BG_TASK_ANALYZE_DIR = 11,
+    BG_TASK_LARGE_SCAN = 12,
+    BG_TASK_LARGE_DELETE = 13,
+    BG_TASK_TAI_AUDIT = 14,
+    BG_TASK_BACKUP_SAVE = 15,
+    BG_TASK_BACKUP_DELETE_SAVE = 16,
+    BG_TASK_CLEAN_PREVIEW_SUBSET = 17
 } BgTask;
 
 extern volatile int g_bgTask;
@@ -268,7 +284,15 @@ extern char g_bgCleanAppTitleId[16];
 extern volatile unsigned long long g_bgSpaceFreed;
 extern SortMode g_bgSortMode;
 extern char g_bgFileFilter[MAX_FILE_FILTER_LENGTH];
+extern char g_bgSearchQuery[64];
+extern int g_bgCleanSubsetMode;
 extern unsigned long long g_bgVisibleSize;
+extern char g_bgTargetPath[MAX_PATH_LENGTH];
+extern char g_bgTargetTitleId[16];
+extern int g_bgLargeMinMB;
+extern int g_bgLastActionOk;
+extern char g_bgLastActionMsg[128];
+extern char g_bgActiveModeLabel[32];
 
 void loadSettings();
 void saveSettings();
@@ -282,6 +306,8 @@ void waitBgIdle();
 #define ANALYZER_MAX_VOLUMES 4
 #define ANALYZER_MAX_CATEGORIES 9
 #define ANALYZER_TOP_DIRS 16
+#define ANALYZER_DIR_ENTRIES 256
+#define ANALYZER_MAX_DEPTH 8
 #define ORPHAN_MAX_ITEMS 192
 
 typedef struct {
@@ -293,6 +319,14 @@ typedef struct {
     char name[48];
     unsigned long long size;
 } AnalyzerTopDir;
+
+typedef struct {
+    char name[128];
+    char fullPath[MAX_PATH_LENGTH];
+    unsigned long long size;
+    int isDir;
+    int deletable;
+} AnalyzerDirEntry;
 
 typedef struct {
     char volume[8];
@@ -311,6 +345,11 @@ typedef struct {
 extern AnalyzerVolumeState g_analyzerVolumes[ANALYZER_MAX_VOLUMES];
 extern volatile int g_analyzerVolumeCount;
 extern volatile int g_analyzerActiveVolume;
+extern char g_analyzerBrowsePath[MAX_PATH_LENGTH];
+extern int g_analyzerPathDepth;
+extern AnalyzerDirEntry g_analyzerDirEntries[ANALYZER_DIR_ENTRIES];
+extern volatile int g_analyzerDirEntryCount;
+extern volatile int g_analyzerDirTruncated;
 
 void analyzerPrepare();
 void analyzerScanVolume(int index);
@@ -334,28 +373,52 @@ void orphanDeleteSelected();
 
 void maintenanceInit();
 
-#define MAX_LANGUAGES 1
+#define MAX_LANGUAGES 7
+#define LANGUAGE_AUTO -1
 #define LANGUAGE_EN 0
+#define LANGUAGE_IT 1
+#define LANGUAGE_ES 2
+#define LANGUAGE_FR 3
+#define LANGUAGE_DE 4
+#define LANGUAGE_PT 5
+#define LANGUAGE_JP 6
+
+#define MAX_THEMES 4
 
 typedef enum {
-    THEME_LIGHT = 0,
-    THEME_DARK = 1
+    THEME_DARK = 0,
+    THEME_LIGHT = 1,
+    THEME_OLED = 2,
+    THEME_VITA = 3
 } AppTheme;
 
 typedef struct {
     int bg_primary;
     int bg_secondary;
+    int bg_glow1;
+    int bg_glow2;
+    int card;
+    int card_solid;
+    int card_dark;
     int text_primary;
     int text_secondary;
+    int text_faint;
     int accent;
+    int accent_dim;
+    int accent_soft;
     int success;
+    int danger;
+    int warning;
     int border;
+    int row_alt;
+    int selected;
 } ThemeColors;
 
 extern int currentLanguage;
+extern int languageMode;
 extern AppTheme currentTheme;
 
-extern ThemeColors themes[2];
+extern ThemeColors themes[MAX_THEMES];
 
 extern const char* lang_titles_screen[MAX_LANGUAGES][15];
 extern const char* lang_profile_options[MAX_LANGUAGES][6];
@@ -363,7 +426,10 @@ extern const char* lang_ui_text[MAX_LANGUAGES][30];
 
 const char* L(const char* lang_array[][30], int lang_index, int text_index);
 void detectSystemLanguage();
+void setLanguageMode(int mode);
+const char* getLanguageName(int lang);
 void setTheme(AppTheme theme);
+const char* getThemeName(AppTheme theme);
 void applyThemeColors(ThemeColors* colors);
 
 #endif

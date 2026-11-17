@@ -6,6 +6,7 @@
 #define SAFETY_MAX_PATH 1024
 #define SAFETY_MAX_REASON 96
 #define SAFETY_MAX_TITLE 12
+#define SAFETY_MAX_APPNAME 64
 #define SAFETY_GROUP_COUNT 6
 
 #define SAFETY_ORPHAN_NONE 0
@@ -40,6 +41,7 @@ typedef struct {
     ItemGroup group;
     char reason[SAFETY_MAX_REASON];
     char titleId[SAFETY_MAX_TITLE];
+    char appName[SAFETY_MAX_APPNAME];
     unsigned char deletion_allowed;
     unsigned char certainty;
     unsigned char user_selected;
@@ -76,7 +78,11 @@ typedef struct {
     unsigned int elapsedSeconds;
 } CleanReport;
 
+typedef int (*SafetyWhitelistFn)(const char *path, const char *titleId);
+
 void safetyInit(const char *const *tempPaths, size_t count);
+void safetySetWhitelistCallback(SafetyWhitelistFn fn);
+int safetyMatchWildcard(const char *pattern, const char *text);
 int safetyIsValidTitleId(const char *titleId);
 int safetyIsDumpFileName(const char *name);
 int safetyIsVolumeRoot(const char *path);

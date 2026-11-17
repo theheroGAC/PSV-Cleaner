@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "psv_cleaner_core.h"
+#include "psv_cleaner_tools.h"
 
 #define SCAN_SLOT_COUNT 512
 #define SCAN_MAX_RECURSION 16
@@ -18,13 +19,23 @@ static const char *ANALYZER_CATEGORY_NAMES[ANALYZER_MAX_CATEGORIES] = {
     "app", "appmeta", "data", "addcont", "patch", "license", "tai", "temp", "other"
 };
 
-static const char *DUMP_SEARCH_ROOTS[] = {"ux0:data/", "ux0:temp/", "ux0:cache/", "ux0:log/"};
+static const char *DUMP_SEARCH_ROOTS[] = {
+    "ux0:data/", "ux0:temp/", "ux0:cache/", "ux0:log/",
+    "ur0:data/", "ur0:temp/",
+    "uma0:data/", "uma0:temp/",
+    "imc0:data/", "imc0:temp/"
+};
 
 static const char *APP_TEMP_DIRS[] = {"cache", "temp", "tmp", "logs", "log"};
 
 AnalyzerVolumeState g_analyzerVolumes[ANALYZER_MAX_VOLUMES];
 volatile int g_analyzerVolumeCount = 0;
 volatile int g_analyzerActiveVolume = 0;
+char g_analyzerBrowsePath[MAX_PATH_LENGTH] = "";
+int g_analyzerPathDepth = 0;
+AnalyzerDirEntry g_analyzerDirEntries[ANALYZER_DIR_ENTRIES];
+volatile int g_analyzerDirEntryCount = 0;
+volatile int g_analyzerDirTruncated = 0;
 
 SmartCleanPlan g_smartCleanPlan;
 CleanScanStats g_smartCleanStats;
@@ -111,6 +122,7 @@ void analyzerPrepare() {
     g_analyzerVolumeCount = count;
     if (g_analyzerActiveVolume >= count) g_analyzerActiveVolume = 0;
 }
+
 typedef int (*ScanFileFn)(void *ctx, const char *path, unsigned long long size);
 
 typedef struct {
@@ -447,6 +459,9 @@ void analyzerScanVolume(int index) {
         }
         state->categories[j + 1] = current;
     }
+
+    analyzerBrowseDir(state->volume);
+    g_analyzerPathDepth = 0;
 }
 
 typedef enum {
@@ -456,9 +471,10 @@ typedef enum {
     ORPHAN_SRC_APPMETA,
     ORPHAN_SRC_LICENSE_RIF,
     ORPHAN_SRC_LICENSE_DIR,
-    ORPHAN_SRC_SAVEDATA
+    ORPHAN_SRC_SAVEDATA,
+    ORPHAN_SRC_REPATCH,
+    ORPHAN_SRC_READDCONT
 } OrphanSource;
-
 
 static int orphanMakeTitleId(const char *name, int offset, char *titleOut, size_t titleSize) {
     char buffer[SAFETY_MAX_TITLE];
@@ -487,8 +503,10 @@ static int orphanEvaluate(OrphanSource source, const char *name, const SceDateTi
             break;
         case ORPHAN_SRC_ADDCONT:
         case ORPHAN_SRC_PATCH:
+        case ORPHAN_SRC_REPATCH:
+        case ORPHAN_SRC_READDCONT:
             if (!orphanMakeTitleId(name, 0, titleOut, titleSize)) return 0;
-            if (source != ORPHAN_SRC_ADDCONT && !isOlderThanDays(mtime, 30)) return 0;
+            if (source != ORPHAN_SRC_ADDCONT && source != ORPHAN_SRC_READDCONT && !isOlderThanDays(mtime, 30)) return 0;
             break;
         case ORPHAN_SRC_APPMETA:
             if (strncmp(name, "NPXS", 4) == 0) return 0;
@@ -525,10 +543,16 @@ static void orphanAddItem(const char *path, const char *titleId, unsigned long l
         return;
     }
 
+    if (whitelistCheck(path, titleId)) {
+        g_orphanSkipped++;
+        return;
+    }
+
     SafetyItem item;
     safetyItemInitWithTitle(&item, path, size,
                             certain ? SAFETY_ORPHAN_CERTAIN : SAFETY_ORPHAN_UNCERTAIN,
                             titleId);
+    resolveTitleName(titleId, item.appName, sizeof(item.appName));
     item.user_selected = 0;
     safetyRecompute(&item);
 
@@ -542,8 +566,14 @@ static void orphanAddProtectedItem(const char *path, const char *titleId, unsign
         return;
     }
 
+    if (whitelistCheck(path, titleId)) {
+        g_orphanSkipped++;
+        return;
+    }
+
     SafetyItem item;
     safetyItemInitWithTitle(&item, path, size, SAFETY_ORPHAN_NONE, titleId);
+    resolveTitleName(titleId, item.appName, sizeof(item.appName));
     item.category = CAT_PROTECTED;
     item.group = GRP_PROTECTED;
     item.certainty = SAFETY_CERTAINTY_NONE;
@@ -587,6 +617,11 @@ static void orphanScanDirectoryRoot(const char *root, OrphanSource source, int d
         safe_strncpy(fullPath, rootPrefix, sizeof(fullPath));
         safe_strncat(fullPath, dir.d_name, sizeof(fullPath));
 
+        if (whitelistCheck(fullPath, titleId)) {
+            g_orphanSkipped++;
+            continue;
+        }
+
         unsigned long long size = isDir ? measurePath(fullPath) : (unsigned long long)dir.d_stat.st_size;
 
         if (verdict == 2) {
@@ -599,32 +634,68 @@ static void orphanScanDirectoryRoot(const char *root, OrphanSource source, int d
     sceIoDclose(dfd);
 }
 
-
 static void orphanScanSaveData() {
-    const char *root = "ux0:user/00/savedata/";
-    SceUID dfd = sceIoDopen(root);
-    if (dfd < 0) return;
+    const char *saveRoots[] = {
+        "ux0:user/00/savedata/",
+        "uma0:user/00/savedata/",
+        "imc0:user/00/savedata/"
+    };
 
-    SceIoDirent dir;
-    memset(&dir, 0, sizeof(dir));
+    for (size_t r = 0; r < sizeof(saveRoots) / sizeof(saveRoots[0]); r++) {
+        SceUID dfd = sceIoDopen(saveRoots[r]);
+        if (dfd < 0) continue;
 
-    while (sceIoDread(dfd, &dir) > 0) {
-        if (isEmergencyStopRequested()) break;
-        if (strcmp(dir.d_name, ".") == 0 || strcmp(dir.d_name, "..") == 0) continue;
-        if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
-        if (!safetyIsValidTitleId(dir.d_name)) continue;
-        if (isTitleIdInstalled(dir.d_name)) continue;
+        SceIoDirent dir;
+        memset(&dir, 0, sizeof(dir));
 
-        char fullPath[SAFETY_MAX_PATH];
-        safe_snprintf(fullPath, sizeof(fullPath), "%s%s", root, dir.d_name);
+        while (sceIoDread(dfd, &dir) > 0) {
+            if (isEmergencyStopRequested()) break;
+            if (strcmp(dir.d_name, ".") == 0 || strcmp(dir.d_name, "..") == 0) continue;
+            if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+            if (!safetyIsValidTitleId(dir.d_name)) continue;
+            if (isTitleIdInstalled(dir.d_name)) continue;
 
-        orphanAddProtectedItem(fullPath, dir.d_name, measurePath(fullPath));
+            char fullPath[SAFETY_MAX_PATH];
+            safe_snprintf(fullPath, sizeof(fullPath), "%s%s", saveRoots[r], dir.d_name);
 
-        if (g_orphanItemCount >= ORPHAN_MAX_ITEMS) break;
+            orphanAddProtectedItem(fullPath, dir.d_name, measurePath(fullPath));
+
+            if (g_orphanItemCount >= ORPHAN_MAX_ITEMS) break;
+        }
+
+        sceIoDclose(dfd);
     }
-
-    sceIoDclose(dfd);
 }
+
+typedef struct {
+    const char *root;
+    OrphanSource source;
+    int dirsOnly;
+} OrphanRootSpec;
+
+static const OrphanRootSpec ORPHAN_ROOTS[] = {
+    {"ux0:data/", ORPHAN_SRC_DATA, 1},
+    {"ux0:addcont/", ORPHAN_SRC_ADDCONT, 1},
+    {"ux0:patch/", ORPHAN_SRC_PATCH, 1},
+    {"ux0:appmeta/", ORPHAN_SRC_APPMETA, 1},
+    {"ux0:license/", ORPHAN_SRC_LICENSE_RIF, 0},
+    {"ux0:license/", ORPHAN_SRC_LICENSE_DIR, 1},
+    {"ux0:rePatch/", ORPHAN_SRC_REPATCH, 1},
+    {"ux0:reAddcont/", ORPHAN_SRC_READDCONT, 1},
+    {"uma0:data/", ORPHAN_SRC_DATA, 1},
+    {"uma0:addcont/", ORPHAN_SRC_ADDCONT, 1},
+    {"uma0:patch/", ORPHAN_SRC_PATCH, 1},
+    {"uma0:appmeta/", ORPHAN_SRC_APPMETA, 1},
+    {"uma0:license/", ORPHAN_SRC_LICENSE_RIF, 0},
+    {"uma0:license/", ORPHAN_SRC_LICENSE_DIR, 1},
+    {"uma0:rePatch/", ORPHAN_SRC_REPATCH, 1},
+    {"imc0:data/", ORPHAN_SRC_DATA, 1},
+    {"imc0:addcont/", ORPHAN_SRC_ADDCONT, 1},
+    {"imc0:patch/", ORPHAN_SRC_PATCH, 1},
+    {"imc0:appmeta/", ORPHAN_SRC_APPMETA, 1},
+    {"imc0:license/", ORPHAN_SRC_LICENSE_RIF, 0},
+    {"imc0:license/", ORPHAN_SRC_LICENSE_DIR, 1}
+};
 
 void orphanScanRun() {
     g_orphanItemCount = 0;
@@ -632,23 +703,19 @@ void orphanScanRun() {
     g_orphanSkipped = 0;
     g_orphanProtected = 0;
 
-    initScanProgress(8);
+    int totalSteps = (int)(sizeof(ORPHAN_ROOTS) / sizeof(ORPHAN_ROOTS[0])) + 1;
+    initScanProgress(totalSteps);
 
-    orphanScanDirectoryRoot("ux0:data/", ORPHAN_SRC_DATA, 1);
-    updateScanProgress(1);
-    orphanScanDirectoryRoot("ux0:addcont/", ORPHAN_SRC_ADDCONT, 1);
-    updateScanProgress(2);
-    orphanScanDirectoryRoot("ux0:patch/", ORPHAN_SRC_PATCH, 1);
-    updateScanProgress(3);
-    orphanScanDirectoryRoot("ux0:appmeta/", ORPHAN_SRC_APPMETA, 1);
-    updateScanProgress(4);
-    orphanScanDirectoryRoot("ux0:license/", ORPHAN_SRC_LICENSE_RIF, 0);
-    updateScanProgress(5);
-    orphanScanDirectoryRoot("ux0:license/", ORPHAN_SRC_LICENSE_DIR, 1);
-    updateScanProgress(6);
-    orphanScanSaveData();
-    updateScanProgress(7);
-    updateScanProgress(8);
+    for (size_t i = 0; i < sizeof(ORPHAN_ROOTS) / sizeof(ORPHAN_ROOTS[0]); i++) {
+        if (isEmergencyStopRequested()) break;
+        orphanScanDirectoryRoot(ORPHAN_ROOTS[i].root, ORPHAN_ROOTS[i].source, ORPHAN_ROOTS[i].dirsOnly);
+        updateScanProgress((int)(i + 1));
+    }
+
+    if (!isEmergencyStopRequested()) {
+        orphanScanSaveData();
+    }
+    updateScanProgress(totalSteps);
 }
 
 static unsigned int maintenanceElapsedSeconds(const SceRtcTick *start, const SceRtcTick *end) {
@@ -732,17 +799,31 @@ void orphanDeleteSelected() {
 
         if (walker.filesDeleted > 0 || walker.dirsDeleted > 0) {
             item->user_selected = 0;
+            item->size = 0;
         }
 
         processed++;
         updateScanProgress(processed);
     }
 
+    int writeIdx = 0;
+    for (int i = 0; i < g_orphanItemCount; i++) {
+        if (g_orphanItems[i].size > 0 || g_orphanItems[i].category == CAT_PROTECTED) {
+            SceIoStat st;
+            if (sceIoGetstat(g_orphanItems[i].path, &st) >= 0) {
+                if (writeIdx != i) g_orphanItems[writeIdx] = g_orphanItems[i];
+                writeIdx++;
+            }
+        }
+    }
+    g_orphanItemCount = writeIdx;
+
     updateScanProgress(selected > 0 ? selected : 1);
     sceRtcGetCurrentTick(&end);
     report.elapsedSeconds = maintenanceElapsedSeconds(&start, &end);
 
     g_cleanReport = report;
+    invalidateSpaceCache();
 }
 
 static void maintenanceResetWalker(ScanWalker *walker, ScanFileFn fileFn, void *ctx, int allowDelete) {
@@ -755,6 +836,11 @@ static void maintenanceResetWalker(ScanWalker *walker, ScanFileFn fileFn, void *
 static int smartScanFile(void *ctx, const char *path, unsigned long long size) {
     (void)ctx;
 
+    if (whitelistCheck(path, NULL)) {
+        g_smartCleanStats.filesSkipped++;
+        return 0;
+    }
+
     SafetyItem item;
     safetyItemInit(&item, path, size, SAFETY_ORPHAN_NONE);
     safetyStatsAdd(&g_smartCleanStats, &item);
@@ -764,6 +850,36 @@ static int smartScanFile(void *ctx, const char *path, unsigned long long size) {
 }
 
 static void smartScanPath(const char *path) {
+    if (whitelistCheck(path, NULL)) return;
+
+    if (strchr(path, '*') != NULL) {
+        const char *slash = strrchr(path, '/');
+        const char *colon = strrchr(path, ':');
+        const char *split = slash ? slash : colon;
+        if (!split) return;
+        char dirPath[SAFETY_MAX_PATH];
+        size_t dirLen = (size_t)(split - path) + 1;
+        if (dirLen >= sizeof(dirPath)) return;
+        memcpy(dirPath, path, dirLen);
+        dirPath[dirLen] = '\0';
+        if (split == colon) safe_strncat(dirPath, "/", sizeof(dirPath));
+        const char *glob = split + 1;
+
+        SceUID dfd = sceIoDopen(dirPath);
+        if (dfd < 0) return;
+        SceIoDirent dir;
+        memset(&dir, 0, sizeof(dir));
+        while (sceIoDread(dfd, &dir) > 0) {
+            if (SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+            if (!safetyMatchWildcard(glob, dir.d_name)) continue;
+            char full[SAFETY_MAX_PATH];
+            safe_snprintf(full, sizeof(full), "%s%s", dirPath, dir.d_name);
+            smartScanFile(NULL, full, (unsigned long long)dir.d_stat.st_size);
+        }
+        sceIoDclose(dfd);
+        return;
+    }
+
     ScanWalker walker;
     SceIoStat stat;
 
@@ -795,6 +911,7 @@ static void smartScanDumpRoots() {
             char fullPath[SAFETY_MAX_PATH];
             safe_strncpy(fullPath, rootPrefix, sizeof(fullPath));
             safe_strncat(fullPath, dir.d_name, sizeof(fullPath));
+            if (whitelistCheck(fullPath, NULL)) continue;
 
             SafetyItem item;
             safetyItemInit(&item, fullPath, (unsigned long long)dir.d_stat.st_size, SAFETY_ORPHAN_NONE);
@@ -813,27 +930,27 @@ static void smartScanAppTempFiles() {
     getInstalledAppsList(&apps, &appCount);
     if (!apps) return;
 
-    const char *appDirs[] = {"ux0:data/%s", "ux0:patch/%s", "ux0:addcont/%s"};
+    const char *appDirs[] = {"ux0:data/%s", "ux0:patch/%s", "ux0:addcont/%s", "ux0:rePatch/%s", "uma0:data/%s", "imc0:data/%s"};
 
     for (int i = 0; i < appCount; i++) {
-        if (isEmergencyStopRequested()) break;
+        if (!isEmergencyStopRequested() && !whitelistCheck(NULL, apps[i])) {
+            for (size_t d = 0; d < sizeof(appDirs) / sizeof(appDirs[0]); d++) {
+                char appPath[MAX_PATH_LENGTH];
+                safe_snprintf(appPath, sizeof(appPath), appDirs[d], apps[i]);
 
-        for (size_t d = 0; d < sizeof(appDirs) / sizeof(appDirs[0]); d++) {
-            char appPath[MAX_PATH_LENGTH];
-            safe_snprintf(appPath, sizeof(appPath), appDirs[d], apps[i]);
+                SceIoStat stat;
+                if (sceIoGetstat(appPath, &stat) < 0) continue;
+                if (!SCE_S_ISDIR(stat.st_mode)) continue;
 
-            SceIoStat stat;
-            if (sceIoGetstat(appPath, &stat) < 0) continue;
-            if (!SCE_S_ISDIR(stat.st_mode)) continue;
+                for (size_t t = 0; t < sizeof(APP_TEMP_DIRS) / sizeof(APP_TEMP_DIRS[0]); t++) {
+                    if (isEmergencyStopRequested()) break;
 
-            for (size_t t = 0; t < sizeof(APP_TEMP_DIRS) / sizeof(APP_TEMP_DIRS[0]); t++) {
-                if (isEmergencyStopRequested()) break;
+                    char tempPath[MAX_PATH_LENGTH];
+                    safe_snprintf(tempPath, sizeof(tempPath), "%s/%s", appPath, APP_TEMP_DIRS[t]);
+                    if (sceIoGetstat(tempPath, &stat) < 0) continue;
 
-                char tempPath[MAX_PATH_LENGTH];
-                safe_snprintf(tempPath, sizeof(tempPath), "%s/%s", appPath, APP_TEMP_DIRS[t]);
-                if (sceIoGetstat(tempPath, &stat) < 0) continue;
-
-                smartScanPath(tempPath);
+                    smartScanPath(tempPath);
+                }
             }
         }
 
@@ -873,6 +990,11 @@ static void smartScanOrphanRoot(const char *root, OrphanSource source, int dirsO
         char fullPath[SAFETY_MAX_PATH];
         safe_strncpy(fullPath, rootPrefix, sizeof(fullPath));
         safe_strncat(fullPath, dir.d_name, sizeof(fullPath));
+
+        if (whitelistCheck(fullPath, titleId)) {
+            g_smartCleanStats.filesSkipped++;
+            continue;
+        }
 
         unsigned long long size = isDir ? measurePath(fullPath) : (unsigned long long)dir.d_stat.st_size;
 
@@ -914,6 +1036,75 @@ static void smartCleanAddResults(CleanReport *report, const ScanWalker *walker) 
 }
 
 static void smartCleanPath(const char *path, CleanReport *report) {
+    if (whitelistCheck(path, NULL)) return;
+
+    if (strchr(path, '*') != NULL) {
+        const char *slash = strrchr(path, '/');
+        const char *colon = strrchr(path, ':');
+        const char *split = slash ? slash : colon;
+        if (!split) return;
+        char dirPath[SAFETY_MAX_PATH];
+        size_t dirLen = (size_t)(split - path) + 1;
+        if (dirLen >= sizeof(dirPath)) return;
+        memcpy(dirPath, path, dirLen);
+        dirPath[dirLen] = '\0';
+        if (split == colon) safe_strncat(dirPath, "/", sizeof(dirPath));
+        const char *glob = split + 1;
+
+        SceUID dfd = sceIoDopen(dirPath);
+        if (dfd < 0) return;
+        char **matches = NULL;
+        unsigned long long *sizes = NULL;
+        int count = 0, cap = 0;
+        SceIoDirent dir;
+        memset(&dir, 0, sizeof(dir));
+        while (sceIoDread(dfd, &dir) > 0) {
+            if (SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+            if (!safetyMatchWildcard(glob, dir.d_name)) continue;
+            if (count >= cap) {
+                int nc = cap ? cap * 2 : 16;
+                char **nm = (char **)realloc(matches, sizeof(char *) * nc);
+                unsigned long long *ns = (unsigned long long *)realloc(sizes, sizeof(unsigned long long) * nc);
+                if (!nm || !ns) {
+                    if (nm) matches = nm;
+                    if (ns) sizes = ns;
+                    break;
+                }
+                matches = nm;
+                sizes = ns;
+                cap = nc;
+            }
+            matches[count] = strdup(dir.d_name);
+            sizes[count] = (unsigned long long)dir.d_stat.st_size;
+            if (matches[count]) count++;
+        }
+        sceIoDclose(dfd);
+
+        for (int i = 0; i < count; i++) {
+            if (!isEmergencyStopRequested()) {
+                char full[SAFETY_MAX_PATH];
+                safe_snprintf(full, sizeof(full), "%s%s", dirPath, matches[i]);
+                report->filesScanned++;
+                SafetyItem item;
+                char reason[SAFETY_MAX_REASON];
+                safetyItemInit(&item, full, sizes[i], SAFETY_ORPHAN_NONE);
+                if (!safetyGroupDeletable(item.group, &g_smartCleanPlan) || !safetyVerifyDelete(&item, reason, sizeof(reason))) {
+                    report->filesSkipped++;
+                } else if (sceIoRemove(full) >= 0) {
+                    report->filesDeleted++;
+                    report->bytesRecovered += sizes[i];
+                    incrementDeletedFilesCount();
+                } else {
+                    report->filesFailed++;
+                }
+            }
+            free(matches[i]);
+        }
+        if (matches) free(matches);
+        if (sizes) free(sizes);
+        return;
+    }
+
     ScanWalker walker;
     SceIoStat stat;
 
@@ -966,6 +1157,7 @@ static void smartCleanDumpRoots(CleanReport *report) {
             if (sceIoRemove(fullPath) >= 0) {
                 report->filesDeleted++;
                 report->bytesRecovered += (unsigned long long)dir.d_stat.st_size;
+                incrementDeletedFilesCount();
             } else {
                 report->filesFailed++;
             }
@@ -982,25 +1174,25 @@ static void smartCleanAppTempFiles(CleanReport *report) {
     getInstalledAppsList(&apps, &appCount);
     if (!apps) return;
 
-    const char *appDirs[] = {"ux0:data/%s", "ux0:patch/%s", "ux0:addcont/%s"};
+    const char *appDirs[] = {"ux0:data/%s", "ux0:patch/%s", "ux0:addcont/%s", "ux0:rePatch/%s", "uma0:data/%s", "imc0:data/%s"};
 
     for (int i = 0; i < appCount; i++) {
-        if (isEmergencyStopRequested()) break;
+        if (!isEmergencyStopRequested() && !whitelistCheck(NULL, apps[i])) {
+            for (size_t d = 0; d < sizeof(appDirs) / sizeof(appDirs[0]); d++) {
+                char appPath[MAX_PATH_LENGTH];
+                safe_snprintf(appPath, sizeof(appPath), appDirs[d], apps[i]);
 
-        for (size_t d = 0; d < sizeof(appDirs) / sizeof(appDirs[0]); d++) {
-            char appPath[MAX_PATH_LENGTH];
-            safe_snprintf(appPath, sizeof(appPath), appDirs[d], apps[i]);
+                SceIoStat stat;
+                if (sceIoGetstat(appPath, &stat) < 0) continue;
+                if (!SCE_S_ISDIR(stat.st_mode)) continue;
 
-            SceIoStat stat;
-            if (sceIoGetstat(appPath, &stat) < 0) continue;
-            if (!SCE_S_ISDIR(stat.st_mode)) continue;
+                for (size_t t = 0; t < sizeof(APP_TEMP_DIRS) / sizeof(APP_TEMP_DIRS[0]); t++) {
+                    if (isEmergencyStopRequested()) break;
 
-            for (size_t t = 0; t < sizeof(APP_TEMP_DIRS) / sizeof(APP_TEMP_DIRS[0]); t++) {
-                if (isEmergencyStopRequested()) break;
-
-                char tempPath[MAX_PATH_LENGTH];
-                safe_snprintf(tempPath, sizeof(tempPath), "%s/%s", appPath, APP_TEMP_DIRS[t]);
-                smartCleanPath(tempPath, report);
+                    char tempPath[MAX_PATH_LENGTH];
+                    safe_snprintf(tempPath, sizeof(tempPath), "%s/%s", appPath, APP_TEMP_DIRS[t]);
+                    smartCleanPath(tempPath, report);
+                }
             }
         }
 
@@ -1073,8 +1265,16 @@ static void smartCleanOrphanRoot(const char *root, OrphanSource source, int dirs
 
             report->filesScanned++;
 
+            if (whitelistCheck(fullPath, titleId)) {
+                report->filesSkipped++;
+                free(candidates[i].name);
+                continue;
+            }
+
+            unsigned long long itemSize = candidates[i].isDir ? measurePath(fullPath) : candidates[i].size;
+
             SafetyItem item;
-            safetyItemInitWithTitle(&item, fullPath, candidates[i].size,
+            safetyItemInitWithTitle(&item, fullPath, itemSize,
                                     (verdict == 1) ? SAFETY_ORPHAN_CERTAIN : SAFETY_ORPHAN_UNCERTAIN,
                                     titleId);
             item.user_selected = 0;
@@ -1102,50 +1302,45 @@ static void smartCleanOrphanRoot(const char *root, OrphanSource source, int dirs
 }
 
 static void smartScanSaveData() {
-    const char *root = "ux0:user/00/savedata/";
-    SceUID dfd = sceIoDopen(root);
-    if (dfd < 0) return;
+    const char *saveRoots[] = {"ux0:user/00/savedata/", "uma0:user/00/savedata/", "imc0:user/00/savedata/"};
+    for (size_t r = 0; r < sizeof(saveRoots) / sizeof(saveRoots[0]); r++) {
+        SceUID dfd = sceIoDopen(saveRoots[r]);
+        if (dfd < 0) continue;
 
-    SceIoDirent dir;
-    memset(&dir, 0, sizeof(dir));
+        SceIoDirent dir;
+        memset(&dir, 0, sizeof(dir));
 
-    while (sceIoDread(dfd, &dir) > 0) {
-        if (isEmergencyStopRequested()) break;
-        if (strcmp(dir.d_name, ".") == 0 || strcmp(dir.d_name, "..") == 0) continue;
-        if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
-        if (!safetyIsValidTitleId(dir.d_name)) continue;
-        if (isTitleIdInstalled(dir.d_name)) continue;
+        while (sceIoDread(dfd, &dir) > 0) {
+            if (isEmergencyStopRequested()) break;
+            if (strcmp(dir.d_name, ".") == 0 || strcmp(dir.d_name, "..") == 0) continue;
+            if (!SCE_S_ISDIR(dir.d_stat.st_mode)) continue;
+            if (!safetyIsValidTitleId(dir.d_name)) continue;
+            if (isTitleIdInstalled(dir.d_name)) continue;
 
-        char fullPath[SAFETY_MAX_PATH];
-        safe_snprintf(fullPath, sizeof(fullPath), "%s%s", root, dir.d_name);
+            char fullPath[SAFETY_MAX_PATH];
+            safe_snprintf(fullPath, sizeof(fullPath), "%s%s", saveRoots[r], dir.d_name);
 
-        SafetyItem item;
-        safetyItemInitWithTitle(&item, fullPath, measurePath(fullPath), SAFETY_ORPHAN_NONE, dir.d_name);
-        item.category = CAT_PROTECTED;
-        item.group = GRP_PROTECTED;
-        item.certainty = SAFETY_CERTAINTY_NONE;
-        safetySetItemReason(&item, "user save data, protected");
-        safetyRecompute(&item);
+            SafetyItem item;
+            safetyItemInitWithTitle(&item, fullPath, measurePath(fullPath), SAFETY_ORPHAN_NONE, dir.d_name);
+            item.category = CAT_PROTECTED;
+            item.group = GRP_PROTECTED;
+            item.certainty = SAFETY_CERTAINTY_NONE;
+            safetySetItemReason(&item, "user save data, protected");
+            safetyRecompute(&item);
 
-        safetyStatsAdd(&g_smartCleanStats, &item);
-        safetyPlanAdd(&g_smartCleanPlan, &item);
+            safetyStatsAdd(&g_smartCleanStats, &item);
+            safetyPlanAdd(&g_smartCleanPlan, &item);
+        }
+
+        sceIoDclose(dfd);
     }
-
-    sceIoDclose(dfd);
 }
 
 static int smartCleanStepCount() {
-    int steps = 0;
-
-    for (size_t i = 0; i < TEMP_PATHS_COUNT; i++) {
-        if (strchr(TEMP_PATHS[i], '*') != NULL) continue;
-        steps++;
-    }
-
-    steps += (int)(sizeof(DUMP_SEARCH_ROOTS) / sizeof(DUMP_SEARCH_ROOTS[0]));
+    int steps = (int)TEMP_PATHS_COUNT;
+    steps += 2;
+    steps += (int)(sizeof(ORPHAN_ROOTS) / sizeof(ORPHAN_ROOTS[0]));
     steps += 1;
-    steps += 7;
-
     return steps > 0 ? steps : 1;
 }
 
@@ -1164,33 +1359,22 @@ void smartCleanScan() {
 
     for (size_t i = 0; i < TEMP_PATHS_COUNT; i++) {
         if (isEmergencyStopRequested()) break;
-        if (strchr(TEMP_PATHS[i], '*') != NULL) continue;
-
         smartScanPath(TEMP_PATHS[i]);
         processed++;
         updateScanProgress(processed);
     }
 
     smartScanDumpRoots();
-    processed++;
-    updateScanProgress(processed);
+    updateScanProgress(++processed);
 
     smartScanAppTempFiles();
-    processed++;
-    updateScanProgress(processed);
+    updateScanProgress(++processed);
 
-    smartScanOrphanRoot("ux0:data/", ORPHAN_SRC_DATA, 1);
-    updateScanProgress(++processed);
-    smartScanOrphanRoot("ux0:addcont/", ORPHAN_SRC_ADDCONT, 1);
-    updateScanProgress(++processed);
-    smartScanOrphanRoot("ux0:patch/", ORPHAN_SRC_PATCH, 1);
-    updateScanProgress(++processed);
-    smartScanOrphanRoot("ux0:appmeta/", ORPHAN_SRC_APPMETA, 1);
-    updateScanProgress(++processed);
-    smartScanOrphanRoot("ux0:license/", ORPHAN_SRC_LICENSE_RIF, 0);
-    updateScanProgress(++processed);
-    smartScanOrphanRoot("ux0:license/", ORPHAN_SRC_LICENSE_DIR, 1);
-    updateScanProgress(++processed);
+    for (size_t i = 0; i < sizeof(ORPHAN_ROOTS) / sizeof(ORPHAN_ROOTS[0]); i++) {
+        if (isEmergencyStopRequested()) break;
+        smartScanOrphanRoot(ORPHAN_ROOTS[i].root, ORPHAN_ROOTS[i].source, ORPHAN_ROOTS[i].dirsOnly);
+        updateScanProgress(++processed);
+    }
 
     smartScanSaveData();
     updateScanProgress(++processed);
@@ -1212,8 +1396,6 @@ void smartCleanRun() {
 
     for (size_t i = 0; i < TEMP_PATHS_COUNT; i++) {
         if (isEmergencyStopRequested()) break;
-        if (strchr(TEMP_PATHS[i], '*') != NULL) continue;
-
         smartCleanPath(TEMP_PATHS[i], &report);
         processed++;
         updateScanProgress(processed);
@@ -1225,28 +1407,24 @@ void smartCleanRun() {
     smartCleanAppTempFiles(&report);
     updateScanProgress(++processed);
 
-    smartCleanOrphanRoot("ux0:data/", ORPHAN_SRC_DATA, 1, &report);
-    updateScanProgress(++processed);
-    smartCleanOrphanRoot("ux0:addcont/", ORPHAN_SRC_ADDCONT, 1, &report);
-    updateScanProgress(++processed);
-    smartCleanOrphanRoot("ux0:patch/", ORPHAN_SRC_PATCH, 1, &report);
-    updateScanProgress(++processed);
-    smartCleanOrphanRoot("ux0:appmeta/", ORPHAN_SRC_APPMETA, 1, &report);
-    updateScanProgress(++processed);
-    smartCleanOrphanRoot("ux0:license/", ORPHAN_SRC_LICENSE_RIF, 0, &report);
-    updateScanProgress(++processed);
-    smartCleanOrphanRoot("ux0:license/", ORPHAN_SRC_LICENSE_DIR, 1, &report);
-    updateScanProgress(++processed);
+    for (size_t i = 0; i < sizeof(ORPHAN_ROOTS) / sizeof(ORPHAN_ROOTS[0]); i++) {
+        if (isEmergencyStopRequested()) break;
+        smartCleanOrphanRoot(ORPHAN_ROOTS[i].root, ORPHAN_ROOTS[i].source, ORPHAN_ROOTS[i].dirsOnly, &report);
+        updateScanProgress(++processed);
+    }
 
     updateScanProgress(steps);
     sceRtcGetCurrentTick(&end);
     report.elapsedSeconds = maintenanceElapsedSeconds(&start, &end);
 
     g_cleanReport = report;
+    invalidateSpaceCache();
 }
 
 void maintenanceInit() {
+    whitelistLoad();
+    historyLoad();
+    safetySetWhitelistCallback(whitelistCheck);
     safetyInit(TEMP_PATHS, TEMP_PATHS_COUNT);
     analyzerPrepare();
 }
-

@@ -7,7 +7,7 @@
 
 **PSV Cleaner** is an advanced maintenance utility and temporary files cleaner designed specifically for the PlayStation Vita homebrew community. This tool helps you keep your console organized and recover valuable storage space by safely removing caches, crash dumps, and unneeded leftovers from uninstalled applications.
 
-**Latest Version: 1.17** – Advanced Storage Maintenance: Storage Analyzer, Smart Clean with Pre-Clean Preview & Reports, Orphan Scanner for deleted apps/DLCs/patches, and a Multi-Tier Safety Engine protecting system files and user savedata!
+**Latest Version: 1.18** – Multi-Language (EN, IT, ES, FR, DE, PT, JP), Dynamic UI Themes (Dark Slate, Light, OLED Black, Vita Blue), Real Preview Filtering & Multi-Select, Real App Names (`param.sfo`), Interactive Storage Analyzer Drill-Down, Large File & Archive Finder, TaiHEN Plugin Auditor, Orphan Save ZIP Backup, Persistent Whitelist & Cleanup History!
 
 ---
 
@@ -77,27 +77,37 @@ When launching the app, you are directly presented with the **Mode Selector**:
 ### Main Dashboard
 * **□**: Reopen **Mode Select** menu.
 * **X**: Start scan & cleaning preview.
-* **△**: Access selective cleaning options menu.
-* **SEL**: Open Per-App cleaning menu.
+* **△**: Access selective cleaning options, UI Theme & Language settings.
+* **SEL**: Open Per-App cleaning menu (with real game/homebrew names).
 * **L**: Open the dedicated **Tools Menu**.
-* **O / START**: Exit PSV Cleaner.
+* **START**: Open **About & Controls**.
+* **O**: Exit PSV Cleaner.
 
 ### Tools Menu (`L` Trigger)
 1. **Storage Analyzer**:
-   * **← / → (or L / R)**: Switch active storage volume (`ux0:`, `ur0:`, `uma0:`, `imc0:`).
-   * **X**: Refresh volume scan.
-   * **O**: Return to Tools Menu.
+   * **← / → (or L / R)**: Switch active storage volume (`ux0:`, `ur0:`, `uma0:`, `imc0:`) at root.
+   * **↑ / ↓ / Left Stick**: Navigate directory explorer.
+   * **X**: Drill down into directory | **O**: Up one directory / Back | **□**: Rescan | **△**: Delete safe item.
 2. **Smart Clean**:
    * Automatic scan across system partitions.
    * Review the **Preview Screen** (Temporary, Cache, Crash Dumps, Orphaned space).
    * Press **X** to execute cleanup or **O** to cancel.
    * Review final metrics on the **Completion Report**.
 3. **Orphan Scanner**:
-   * Scans for orphaned folders and files left by deleted games.
-   * **↑ / ↓**: Navigate through orphan entries.
-   * **X**: Toggle selection for review items.
-   * **START**: Confirm and delete selected orphans.
+   * Scans for orphaned folders and files left by deleted games across `ux0:`, `uma0:`, and `imc0:` (including `rePatch/` and `reAddcont/`).
+   * **↑ / ↓**: Navigate through orphan entries | **L / R**: Fast Page Up / Down.
+   * **X**: Toggle selection | **□**: Select all eligible items.
+   * **SEL**: Backup orphaned savedata to ZIP (with optional delete) or add to Whitelist.
+   * **△ / START**: Confirm and delete selected orphans.
    * **O**: Back to Tools Menu.
+4. **Large File Finder**:
+   * Scans partitions for large files (`>= 10/50/100/250 MB`) and leftover `.vpk`/`.pkg`/`.zip`/`.7z`/`.rar`/`.cso` archives.
+   * **X**: Toggle | **□**: Cycle threshold | **△ / START**: Delete selected | **SEL**: Add to Whitelist.
+5. **TaiHEN Auditor**:
+   * Checks `ur0:tai/` and `ux0:tai/` conflicts, missing plugin paths in `config.txt`, and unused/backup `.skprx`/`.suprx` files.
+   * **X**: Select unused/backup file | **□**: Backup `config.txt` | **△**: Delete selected | **R**: Rescan.
+6. **Cleanup History & Whitelist Manager**:
+   * Review persistent cleanup sessions (`history.log`), lifetime recovered space, and manage protected paths/Title IDs (`whitelist.txt`).
 
 ### Emergency Stop
 * Press **$\Delta$** or **$\bigcirc$** during any scanning or deletion operation to safely halt the process immediately.

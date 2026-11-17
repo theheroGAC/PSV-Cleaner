@@ -1,5 +1,28 @@
 # PSV Cleaner Changelog
 
+## Version 1.18 - November 17, 2026
+
+### Added
+- **Multi-Language Support**: Real system language detection via `sceAppUtilSystemParamGetInt` plus manual selector in Options (`Auto`, `EN`, `IT`, `ES`, `FR`, `DE`, `PT`, `JP`).
+- **Dynamic UI Themes**: Live switching between `Dark Slate`, `Light`, `OLED Black`, and `Vita Blue`, persisted in `settings.bin` (with v1 migration).
+- **Large File & Leftover Archive Finder**: Finds big files (`>= 10/50/100/250 MB`) and leftover `.vpk`/`.pkg`/`.zip`/`.7z`/`.rar`/`.cso` packages across `ux0:`, `uma0:`, `imc0:`, and `ur0:data/`.
+- **TaiHEN / Plugin Auditor**: Detects `ux0:tai/` vs `ur0:tai/` conflicts, broken `config.txt` plugin entries, duplicates, and unused/backup `.skprx`/`.suprx` files with one-button `config.txt.bak` backup.
+- **Orphan Save ZIP Backup**: Standard PKZIP archive backup of orphaned savedata (`zlib` deflate) to `uma0:PSV_Cleaner_Backups/` or `ux0:data/PSV_Cleaner/saves_backup/` with optional post-backup deletion.
+- **Storage Analyzer Drill-Down**: Interactive directory explorer (`X` to open subfolders, `O` to go up, `△` to delete safe items).
+- **Real Game & Homebrew Names**: Parses `param.sfo` (`TITLE` / `STITLE`) to display readable app names in Per-App Cleaning and Orphan Scanner.
+- **Persistent Whitelist & Cleanup History**: Exclude specific paths or Title IDs (`whitelist.txt`), view historical sessions (`history.log`), and track lifetime recovered space (`stats.bin`).
+- **On-Screen Toast Notifications & Vita Controls**: Non-blocking toast overlay, `L`/`R` fast page scrolling, left analog stick navigation, front touchscreen tap/swipe, `SceImeDialog` text search, About/Controls screen, and instant result dismissal.
+- **Expanded Multi-Volume Coverage**: Added `uma0:`, `imc0:`, `ur0:` crash dumps, `rePatch/`, `reAddcont/`, `bgdl/w/`, `ptmp/`, and full Options menu toggles for all core categories.
+
+### Fixed
+- **Preview Filtering & Multi-Select**: Extension filter (`tmp`, `log`, `cache`, `dmp`, `vpk`, `pkg`) and text search now filter displayed rows, with checkboxes for cleaning selected or filtered files.
+- **Exclude VitaDB Cache**: Fixed off-by-one `strncmp` length (`17` vs `16`) and covered `ux0:vdb_data/` and `ux0:data/vdb_vpk/`.
+- **Wildcard Pattern Support**: Expanded `*` globs in `TEMP_PATHS[]` and `safetyPathIsCurated()` across scan, preview, smart clean, and deletion.
+- **ScanCache Subdirectory Detection**: Checks recursive directory mtime (depth 2) so changes in subfolders invalidate stale cache entries.
+- **README Controls Alignment**: Fixed Orphan Scanner confirm button documentation (`△ / START`).
+
+---
+
 ## Version 1.17 - September 26, 2026
 
 ### Added
